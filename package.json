@@ -1,0 +1,17 @@
+{
+  "name": "generador-json-service",
+  "version": "1.0.0",
+  "description": "Servicio que genera practice.json / exam.json / formulas.json por tema (DeepSeek crea, ChatGPT corrige) y los guarda en Cloudflare KV.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
