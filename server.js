@@ -29,8 +29,8 @@ function chequearAuth(req, res) {
  *   Default: ["practice", "exam"].
  *
  * Llamado por generador-service-main después de generar el contenido
- * teórico de un tema (mismo tema, mismo slug). Corre DeepSeek (crea) +
- * ChatGPT (corrige) para cada tipo pedido, y guarda cada resultado en KV
+ * teórico de un tema (mismo tema, mismo slug). Corre Claude (crea) +
+ * Mistral (corrige) para cada tipo pedido, y guarda cada resultado en KV
  * (namespace practice_JSON, keys "practice:<slug>" / "exam:<slug>" /
  * "formulas:<slug>").
  *

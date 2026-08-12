@@ -1,7 +1,7 @@
 # generador-json-service
 
 Servicio que genera `practice.json`, `exam.json` y opcionalmente
-`formulas.json` para un tema, con pipeline DeepSeek (crea) -> ChatGPT
+`formulas.json` para un tema, con pipeline Claude (crea) -> Mistral
 (corrige) -> guarda en Cloudflare KV (namespace `practice_JSON`).
 
 Pensado para ser llamado por `generador-service-main` después de que
@@ -25,8 +25,8 @@ arranque si falta alguna).
 | Variable | Para qué |
 |---|---|
 | `SERVICE_KEY` | Auth entre `generador-service-main` y este service (header `Authorization: Bearer ...`). Distinta a la del otro repo. |
-| `DEEPSEEK_API_KEY` | IA que crea el borrador |
-| `OPENAI_API_KEY` | IA que corrige el borrador |
+| `ANTHROPIC_API_KEY` | IA que crea el borrador (Claude) |
+| `MISTRAL_API_KEY` | IA que corrige el borrador (Mistral) |
 | `CLOUDFLARE_ACCOUNT_ID` | Cuenta de Cloudflare |
 | `CLOUDFLARE_NAMESPACE_ID_PRACTICE` | Namespace ID de KV `practice_JSON` |
 | `CLOUDFLARE_API_TOKEN` | Token con permiso `Account > Workers KV Storage > Edit` |
