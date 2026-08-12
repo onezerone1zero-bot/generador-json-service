@@ -20,10 +20,10 @@ const INSTRUCCIONES_POR_TIPO = {
 };
 
 /**
- * Prompt para DeepSeek (IA que CREA el primer borrador).
+ * Prompt para Claude (IA que CREA el primer borrador).
  * tipo: "practice" | "exam" | "formula"
  */
-export function armarPromptDeepSeek(tipo, materia, tema) {
+export function armarPromptClaude(tipo, materia, tema) {
   if (tipo === "formula") {
     return {
       system: `Sos un asistente que arma fichas de fórmulas de matemática/estadística para una biblioteca educativa (materia: "${materia}", tema: "${tema}").
@@ -56,11 +56,11 @@ No repitas preguntas entre modelos. No agregues texto fuera del JSON.`,
 }
 
 /**
- * Prompt para ChatGPT (IA que CORRIGE el borrador de DeepSeek).
+ * Prompt para Mistral (IA que CORRIGE el borrador de Claude).
  * tipo: "practice" | "exam" | "formula"
- * borrador: el objeto JSON ya parseado que devolvió DeepSeek.
+ * borrador: el objeto JSON ya parseado que devolvió Claude.
  */
-export function armarPromptChatGPT(tipo, borrador) {
+export function armarPromptMistral(tipo, borrador) {
   if (tipo === "formula") {
     return {
       system: `Revisá este borrador de fórmulas. Corregí errores matemáticos, LaTeX mal formado, y nombres poco claros.
