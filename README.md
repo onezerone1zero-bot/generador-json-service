@@ -72,10 +72,24 @@ Chequeo simple, devuelve `{ "ok": true }`.
 
 ## Notas
 
-- Las keys de KV (`practice:<slug>`, `exam:<slug>`, `formulas:<slug>`)
-  usan `slugify` calcado del repo `generador-service-main`, con
-  guiones (no guión bajo), para que el slug sea consistente entre
-  servicios.
+- Las keys de KV combinan **materia + tema**:
+  `practice:<slug-materia>--<slug-tema>` (y lo mismo para `exam:` y
+  `formulas:`), separados por `--`. Esto evita que dos materias
+  distintas con un tema de mismo nombre (ej. "Introducción" en Física
+  y en Química) se pisen entre sí. `slugify` usa guiones (no guión
+  bajo) y está calcado del repo `generador-service-main`, para que el
+  slug sea consistente entre servicios.
+- Esta MISMA key la arma también el Worker (`arch-upload-worker`,
+  rutas `/practice` y `/exam`) a partir de la URL
+  `/practice/<materia>/<tema>` que le pega el frontend — si se cambia
+  el formato de key acá, hay que cambiarlo ahí también.
 - El schema de pregunta asumido está documentado en `prompts/prompts.js`
   (`PREGUNTA_SCHEMA_EJEMPLO`). Si el frontend espera otra forma, se
   ajusta ahí.
+- **Premium**: el service genera y guarda TODOS los modelos
+  (`premium: true` y `false`) en KV. El filtrado de qué se sirve
+  ocurre en el Worker, no acá — hoy el Worker solo devuelve los
+  modelos `premium: false`, porque todavía no existe un sistema de
+  pagos conectado al login (la tabla `profile` de Supabase no tiene
+  campo de plan/suscripción). Cuando ese sistema exista, el cambio va
+  en el Worker, no en este service.
