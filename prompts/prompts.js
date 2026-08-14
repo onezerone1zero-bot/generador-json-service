@@ -19,6 +19,14 @@ const INSTRUCCIONES_POR_TIPO = {
     "Generá las fórmulas clave del tema (las que se muestran en el título/encabezado del tema), en LaTeX, con una etiqueta corta de qué es cada una.",
 };
 
+// Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
+// 3 modelos free de 12 preguntas cada uno para el examen (antes 10) --
+// practice se mantiene en 10, que es lo que ya venía funcionando.
+const PREGUNTAS_POR_MODELO = {
+  practice: 10,
+  exam: 12,
+};
+
 /**
  * Prompt para Claude (IA que CREA el primer borrador).
  * tipo: "practice" | "exam" | "formula"
@@ -34,20 +42,23 @@ No agregues texto fuera del JSON.`,
     };
   }
 
+  const cantidad = PREGUNTAS_POR_MODELO[tipo] ?? 10;
+
   return {
     system: `Sos un asistente que arma bancos de preguntas de opción múltiple para una biblioteca educativa (materia: "${materia}", tema: "${tema}").
 ${INSTRUCCIONES_POR_TIPO[tipo]}
 Devolvé SOLO un JSON válido con esta forma exacta:
 {
   "modelos": [
-    { "premium": false, "preguntas": [ /* 10 preguntas */ ] },
-    { "premium": false, "preguntas": [ /* 10 preguntas */ ] },
-    { "premium": false, "preguntas": [ /* 10 preguntas */ ] },
-    { "premium": true,  "preguntas": [ /* 10 preguntas */ ] },
-    { "premium": true,  "preguntas": [ /* 10 preguntas */ ] },
-    { "premium": true,  "preguntas": [ /* 10 preguntas */ ] }
+    { "premium": false, "preguntas": [ /* ${cantidad} preguntas */ ] },
+    { "premium": false, "preguntas": [ /* ${cantidad} preguntas */ ] },
+    { "premium": false, "preguntas": [ /* ${cantidad} preguntas */ ] },
+    { "premium": true,  "preguntas": [ /* ${cantidad} preguntas */ ] },
+    { "premium": true,  "preguntas": [ /* ${cantidad} preguntas */ ] },
+    { "premium": true,  "preguntas": [ /* ${cantidad} preguntas */ ] }
   ]
 }
+Cada modelo tiene EXACTAMENTE ${cantidad} preguntas, ni más ni menos.
 Cada pregunta tiene esta forma: ${JSON.stringify(PREGUNTA_SCHEMA_EJEMPLO)}.
 Los modelos premium:true tienen que ser un poco más difíciles/completos que los premium:false.
 No repitas preguntas entre modelos. No agregues texto fuera del JSON.`,
