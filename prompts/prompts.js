@@ -34,9 +34,9 @@ const PREGUNTAS_POR_MODELO = {
 export function armarPromptClaude(tipo, materia, tema) {
   if (tipo === "formula") {
     return {
-      system: `Sos un asistente que arma fichas de fórmulas de matemática/estadística para una biblioteca educativa (materia: "${materia}", tema: "${tema}").
-${INSTRUCCIONES_POR_TIPO.formula}
-Devolvé SOLO un JSON válido con esta forma: {"formulas": [{"nombre": "string", "latex": "string"}]}.
+      system: `Sos un asistente que identifica la fórmula principal de un tema de matemática/estadística para una biblioteca educativa (materia: "${materia}", tema: "${tema}").
+Es la fórmula que resume el tema, la que se muestra como título/encabezado.
+Devolvé SOLO un JSON válido con esta forma: {"formula": "string en LaTeX"}.
 No agregues texto fuera del JSON.`,
       prompt: `Materia: ${materia}\nTema: ${tema}`,
     };
@@ -74,8 +74,8 @@ No repitas preguntas entre modelos. No agregues texto fuera del JSON.`,
 export function armarPromptMistral(tipo, borrador) {
   if (tipo === "formula") {
     return {
-      system: `Revisá este borrador de fórmulas. Corregí errores matemáticos, LaTeX mal formado, y nombres poco claros.
-Devolvé el JSON corregido completo con la misma forma {"formulas": [...]}. Sin texto fuera del JSON.`,
+      system: `Revisá esta fórmula principal del tema. Corregí errores matemáticos o LaTeX mal formado.
+Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuera del JSON.`,
       prompt: JSON.stringify(borrador),
     };
   }
