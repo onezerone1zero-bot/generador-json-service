@@ -26,7 +26,7 @@ function chequearAuth(req, res) {
  * POST /generar-json
  * Body: { materia, tema, tipos? }
  *   tipos (opcional): subset de ["practice", "exam", "formula"].
- *   Default: ["practice", "exam"].
+ *   Default: ["practice", "exam", "formula"].
  *
  * Llamado por generador-service-main después de generar el contenido
  * teórico de un tema (mismo tema, mismo slug). Corre Claude (crea) +
@@ -49,7 +49,7 @@ app.post("/generar-json", async (req, res) => {
   }
 
   const tiposValidos = ["practice", "exam", "formula"];
-  const tiposPedidos = Array.isArray(tipos) && tipos.length > 0 ? tipos : ["practice", "exam"];
+  const tiposPedidos = Array.isArray(tipos) && tipos.length > 0 ? tipos : ["practice", "exam", "formula"];
   const tiposInvalidos = tiposPedidos.filter((t) => !tiposValidos.includes(t));
   if (tiposInvalidos.length > 0) {
     return res.status(400).json({ error: `tipos inválidos: ${tiposInvalidos.join(", ")}. Válidos: ${tiposValidos.join(", ")}` });
