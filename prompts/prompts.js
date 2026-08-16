@@ -37,6 +37,16 @@ export function armarPromptClaude(tipo, materia, tema) {
       system: `Sos un asistente que identifica la fórmula principal de un tema de matemática/estadística para una biblioteca educativa (materia: "${materia}", tema: "${tema}").
 Es la fórmula que resume el tema, la que se muestra como título/encabezado.
 Devolvé SOLO un JSON válido con esta forma: {"formula": "string en LaTeX"}.
+
+Si el tema tiene UNA sola fórmula que lo resume, devolvé esa fórmula sola, sin envoltorio extra.
+
+Si el tema tiene VARIAS fórmulas igual de importantes (ej: "Integrales definidas e indefinidas" tiene
+dos fórmulas centrales, una por cada tipo), NO las juntes en una sola línea separadas por espacio o
+\\quad -- envolvé todas las fórmulas juntas en un solo bloque \\begin{gathered}...\\end{gathered},
+separando cada fórmula con \\\\ (doble backslash, salto de línea real de LaTeX). Ejemplo con dos
+fórmulas: "\\begin{gathered}\\int f(x)\\,dx = F(x) + C \\\\ \\int_a^b f(x)\\,dx = F(b) - F(a)\\end{gathered}".
+Nunca más de 3-4 fórmulas en el mismo bloque -- si hay más, elegí solo las 2-3 más representativas del tema.
+
 No agregues texto fuera del JSON.`,
       prompt: `Materia: ${materia}\nTema: ${tema}`,
     };
@@ -75,6 +85,9 @@ export function armarPromptMistral(tipo, borrador) {
   if (tipo === "formula") {
     return {
       system: `Revisá esta fórmula principal del tema. Corregí errores matemáticos o LaTeX mal formado.
+Si el campo "formula" tiene varias fórmulas dentro de un bloque \\begin{gathered}...\\end{gathered}
+separadas por \\\\, mantené esa estructura -- es el formato esperado para temas con más de una fórmula
+central, no lo deshagas ni lo juntes en una sola línea.
 Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuera del JSON.`,
       prompt: JSON.stringify(borrador),
     };
