@@ -201,21 +201,23 @@ con la misma forma. Sin texto fuera del JSON.`,
 }
 
 /**
- * Prompt para Fable (IA que CORRIGE el borrador cuando tipo="exam";
- * mismo rol que armarPromptMistral, pero para el paso de corrección
- * con tool use forzado). A diferencia del prompt de Mistral -- que
- * pide "corregí errores matemáticos" como una línea entre varias otras
- * tareas de proofreading -- este es explícito paso a paso: pide
- * RE-DERIVAR cada función antes de mirar qué opción quedó marcada, en
- * vez de leer el texto y juzgar si "suena" coherente. Esto es
- * deliberado: un borrador puede tener una explicación con álgebra
- * correcta y un resultado final que la contradice (visto en auditoría
- * manual de un examen real de "Cálculo / Derivadas" -- 4 de 71
- * preguntas con ese patrón), que un chequeo superficial de coherencia
- * textual no atrapa pero un recálculo sí.
+ * Prompt para Opus (IA que CORRIGE el borrador con re-derivación
+ * explícita; antes lo corría Fable, mismo prompt, solo cambió el
+ * modelo). Se usa para "exam" siempre, y ahora también para
+ * "practice"/"formula" como corrector -- ver MODELO_CLAUDE_POR_TIPO en
+ * generar.js. A diferencia del prompt de Mistral -- que pide "corregí
+ * errores matemáticos" como una línea entre varias otras tareas de
+ * proofreading -- este es explícito paso a paso: pide RE-DERIVAR cada
+ * función antes de mirar qué opción quedó marcada, en vez de leer el
+ * texto y juzgar si "suena" coherente. Esto es deliberado: un borrador
+ * puede tener una explicación con álgebra correcta y un resultado
+ * final que la contradice (visto en auditoría manual de un examen real
+ * de "Cálculo / Derivadas" -- 4 de 71 preguntas con ese patrón), que un
+ * chequeo superficial de coherencia textual no atrapa pero un
+ * recálculo sí.
  *
  * Si esta corrección falla o no valida, generar.js cae a
- * armarPromptMistral como fallback -- ver intentarCorregirConFable /
+ * armarPromptMistral como fallback -- ver intentarCorregirConOpus /
  * intentarCorregirConMistral ahí.
  */
 export function armarPromptCorreccionFable(tipo, borrador) {
