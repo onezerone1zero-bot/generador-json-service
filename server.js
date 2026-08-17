@@ -29,9 +29,11 @@ function chequearAuth(req, res) {
  *   Default: ["practice", "exam", "formula"].
  *
  * Llamado por generador-service-main después de generar el contenido
- * teórico de un tema (mismo tema, mismo slug). Corre Claude (crea) +
- * Mistral (corrige) para cada tipo pedido, y guarda cada resultado en KV
- * (namespace practice_JSON, keys "practice:<slug>" / "exam:<slug>" /
+ * teórico de un tema (mismo tema, mismo slug). Para cada tipo pedido
+ * corre Claude/Fable (crea) + un corrector -- Mistral para
+ * practice/formula, Fable con Mistral de fallback para exam, ver
+ * lib/generar.js -- y guarda cada resultado en KV (namespaces
+ * separados por tipo, keys "practice:<slug>" / "exam:<slug>" /
  * "formulas:<slug>").
  *
  * Es síncrono (como /generar en el otro service): espera el resultado y

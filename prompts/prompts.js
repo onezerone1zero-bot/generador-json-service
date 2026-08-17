@@ -99,6 +99,25 @@ export function armarToolClaude(tipo) {
 }
 
 /**
+ * Tool schema para la CORRECCIÓN con Fable (misma forma que
+ * armarToolClaude, pero con nombre/descripción propios de un paso de
+ * revisión en vez de creación). Se reusa la construcción del schema en
+ * vez de duplicarlo a mano, así ambos tools quedan garantizados
+ * idénticos en forma -- si se cambia el schema de preguntas en un
+ * lugar (ej: agregar un campo nuevo a "pregunta"), automáticamente
+ * aplica a los dos pasos sin tener que recordar tocar dos sitios.
+ * Usada hoy solo para tipo="exam" -- ver MODELO_CLAUDE_POR_TIPO en
+ * generar.js.
+ */
+export function armarToolCorreccion(tipo) {
+  const toolBase = armarToolClaude(tipo);
+  if (tipo === "formula") {
+    return { ...toolBase, name: "guardar_formula_corregida", description: "Guarda la fórmula corregida del tema." };
+  }
+  return { ...toolBase, name: "guardar_banco_preguntas_corregido", description: `Guarda el banco de preguntas de ${tipo} corregido para el tema.` };
+}
+
+/**
  * Prompt para Claude (IA que CREA el primer borrador).
  * tipo: "practice" | "exam" | "formula"
  */
@@ -151,6 +170,14 @@ No repitas preguntas entre modelos. No agregues texto fuera del JSON.`,
  * Prompt para Mistral (IA que CORRIGE el borrador de Claude).
  * tipo: "practice" | "exam" | "formula"
  * borrador: el objeto JSON ya parseado que devolvió Claude.
+ *
+ * Para tipo="exam" este ya no es el corrector principal: generar.js
+ * intenta primero con Fable (armarPromptCorreccionFable, más abajo) y
+ * solo llama a esto si Fable falla o no valida -- ver
+ * intentarCorregirConFable/intentarCorregirConMistral en generar.js.
+ * El texto de este prompt no se tocó a propósito (para no cambiar el
+ * comportamiento ya validado de practice/formula, que lo siguen usando
+ * como corrector único).
  */
 export function armarPromptMistral(tipo, borrador) {
   if (tipo === "formula") {
@@ -169,6 +196,55 @@ Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuer
 opciones repetidas o mal armadas, y que "respuesta_correcta" apunte realmente a la opción correcta.
 Mantené la cantidad de modelos y de preguntas por modelo tal cual está. Devolvé el JSON corregido completo
 con la misma forma. Sin texto fuera del JSON.`,
+    prompt: JSON.stringify(borrador),
+  };
+}
+
+/**
+ * Prompt para Fable (IA que CORRIGE el borrador cuando tipo="exam";
+ * mismo rol que armarPromptMistral, pero para el paso de corrección
+ * con tool use forzado). A diferencia del prompt de Mistral -- que
+ * pide "corregí errores matemáticos" como una línea entre varias otras
+ * tareas de proofreading -- este es explícito paso a paso: pide
+ * RE-DERIVAR cada función antes de mirar qué opción quedó marcada, en
+ * vez de leer el texto y juzgar si "suena" coherente. Esto es
+ * deliberado: un borrador puede tener una explicación con álgebra
+ * correcta y un resultado final que la contradice (visto en auditoría
+ * manual de un examen real de "Cálculo / Derivadas" -- 4 de 71
+ * preguntas con ese patrón), que un chequeo superficial de coherencia
+ * textual no atrapa pero un recálculo sí.
+ *
+ * Si esta corrección falla o no valida, generar.js cae a
+ * armarPromptMistral como fallback -- ver intentarCorregirConFable /
+ * intentarCorregirConMistral ahí.
+ */
+export function armarPromptCorreccionFable(tipo, borrador) {
+  if (tipo === "formula") {
+    return {
+      system: `Revisá esta fórmula principal del tema. Corregí errores matemáticos o LaTeX mal formado.
+Si el campo "formula" tiene varias fórmulas dentro de un bloque \\begin{gathered}...\\end{gathered}
+separadas por \\\\, mantené esa estructura -- es el formato esperado para temas con más de una fórmula
+central, no lo deshagas ni lo juntes en una sola línea.
+Guardá la fórmula corregida con la herramienta.`,
+      prompt: JSON.stringify(borrador),
+    };
+  }
+
+  return {
+    system: `Revisá este borrador de banco de preguntas de matemática. Para CADA pregunta, hacé lo siguiente
+en este orden:
+1. Volvé a derivar (o resolver) la función del enunciado DESDE CERO, con tu propio cálculo, sin mirar
+   todavía cuál opción está marcada como correcta.
+2. Comparé tu resultado contra las 4 opciones. Si tu resultado coincide EXACTAMENTE (incluyendo signo)
+   con una de las 4 opciones, marcá esa como "respuesta_correcta". Si no coincide con ninguna, reescribí
+   la opción marcada con tu resultado correcto (no dejes una opción matemáticamente incorrecta aunque sea
+   la que estaba marcada).
+3. Verificá que las 4 opciones de cada pregunta sean todas DISTINTAS entre sí como texto -- si dos
+   opciones son idénticas, reescribí una de las incorrectas para que sea un distractor plausible pero
+   distinto.
+4. Revisá ambigüedades en el enunciado y que la explicación no se contradiga con el resultado final.
+No cambies la cantidad de modelos ni de preguntas por modelo. Guardá el banco corregido completo con la
+herramienta.`,
     prompt: JSON.stringify(borrador),
   };
 }
