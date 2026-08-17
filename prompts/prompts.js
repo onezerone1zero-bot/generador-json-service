@@ -28,6 +28,77 @@ const PREGUNTAS_POR_MODELO = {
 };
 
 /**
+ * Tool schema para forzar a Claude a devolver JSON válido por
+ * construcción (tool use), en vez de texto libre que hay que parsear
+ * después con extraerJson(). Con tool_choice forzado, la API de
+ * Anthropic valida la respuesta contra este schema del lado del
+ * servidor antes de devolverla -- elimina la clase entera de errores
+ * de "JSON mal formado" (comillas faltantes, comas colgantes, etc.)
+ * que puede meter un modelo escribiendo texto suelto.
+ */
+export function armarToolClaude(tipo) {
+  if (tipo === "formula") {
+    return {
+      name: "guardar_formula",
+      description: "Guarda la fórmula principal del tema.",
+      input_schema: {
+        type: "object",
+        properties: {
+          formula: { type: "string", description: "Fórmula en LaTeX" },
+        },
+        required: ["formula"],
+      },
+    };
+  }
+
+  const cantidad = PREGUNTAS_POR_MODELO[tipo] ?? 10;
+  const pregunta = {
+    type: "object",
+    properties: {
+      enunciado: { type: "string" },
+      opciones: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 4,
+        maxItems: 4,
+      },
+      respuesta_correcta: { type: "integer", minimum: 0, maximum: 3 },
+      explicacion: { type: "string" },
+    },
+    required: ["enunciado", "opciones", "respuesta_correcta", "explicacion"],
+  };
+
+  return {
+    name: "guardar_banco_preguntas",
+    description: `Guarda el banco de preguntas de ${tipo} para el tema.`,
+    input_schema: {
+      type: "object",
+      properties: {
+        modelos: {
+          type: "array",
+          minItems: 6,
+          maxItems: 6,
+          items: {
+            type: "object",
+            properties: {
+              premium: { type: "boolean" },
+              preguntas: {
+                type: "array",
+                minItems: cantidad,
+                maxItems: cantidad,
+                items: pregunta,
+              },
+            },
+            required: ["premium", "preguntas"],
+          },
+        },
+      },
+      required: ["modelos"],
+    },
+  };
+}
+
+/**
  * Prompt para Claude (IA que CREA el primer borrador).
  * tipo: "practice" | "exam" | "formula"
  */
