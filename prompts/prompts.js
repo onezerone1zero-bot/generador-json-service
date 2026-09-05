@@ -1,8 +1,3 @@
-// ASUNCIÓN A CONFIRMAR: no tenemos el contenido real de practice.js/exam.js
-// del frontend en este chat, así que este es el schema de "pregunta" que
-// asumimos (multiple choice con 4 opciones). Si el frontend espera otra
-// forma, se cambia ACÁ nomás -- es el único lugar donde hay que tocar algo,
-// tanto para el schema como para el texto de los prompts.
 export const PREGUNTA_SCHEMA_EJEMPLO = {
   enunciado: "string, puede incluir LaTeX entre $...$",
   opciones: ["string", "string", "string", "string"],
@@ -19,23 +14,11 @@ const INSTRUCCIONES_POR_TIPO = {
     "Generá las fórmulas clave del tema (las que se muestran en el título/encabezado del tema), en LaTeX, con una etiqueta corta de qué es cada una.",
 };
 
-// Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
-// 3 modelos free de 12 preguntas cada uno para el examen (antes 10) --
-// practice se mantiene en 10, que es lo que ya venía funcionando.
 const PREGUNTAS_POR_MODELO = {
   practice: 10,
   exam: 12,
 };
 
-/**
- * Tool schema para forzar a Claude a devolver JSON válido por
- * construcción (tool use), en vez de texto libre que hay que parsear
- * después con extraerJson(). Con tool_choice forzado, la API de
- * Anthropic valida la respuesta contra este schema del lado del
- * servidor antes de devolverla -- elimina la clase entera de errores
- * de "JSON mal formado" (comillas faltantes, comas colgantes, etc.)
- * que puede meter un modelo escribiendo texto suelto.
- */
 export function armarToolClaude(tipo) {
   if (tipo === "formula") {
     return {
@@ -98,17 +81,6 @@ export function armarToolClaude(tipo) {
   };
 }
 
-/**
- * Tool schema para la CORRECCIÓN con Fable (misma forma que
- * armarToolClaude, pero con nombre/descripción propios de un paso de
- * revisión en vez de creación). Se reusa la construcción del schema en
- * vez de duplicarlo a mano, así ambos tools quedan garantizados
- * idénticos en forma -- si se cambia el schema de preguntas en un
- * lugar (ej: agregar un campo nuevo a "pregunta"), automáticamente
- * aplica a los dos pasos sin tener que recordar tocar dos sitios.
- * Usada hoy solo para tipo="exam" -- ver MODELO_CLAUDE_POR_TIPO en
- * generar.js.
- */
 export function armarToolCorreccion(tipo) {
   const toolBase = armarToolClaude(tipo);
   if (tipo === "formula") {
@@ -117,17 +89,21 @@ export function armarToolCorreccion(tipo) {
   return { ...toolBase, name: "guardar_banco_preguntas_corregido", description: `Guarda el banco de preguntas de ${tipo} corregido para el tema.` };
 }
 
-/**
- * Prompt para Claude (IA que CREA el primer borrador).
- * tipo: "practice" | "exam" | "formula"
- */
-export function armarPromptClaude(tipo, materia, tema) {
+function bloqueIdioma(idioma, campoExtra) {
+  if (!idioma || idioma === "es") return "";
+  const campos = ["enunciado", "opciones", "explicacion", ...(campoExtra ? [campoExtra] : [])].join(", ");
+  return `\nIMPORTANTE - idioma de salida: "materia" y "tema" ya te llegan en el idioma de esta instancia
+(código "${idioma}"). Todo el contenido que generás (${campos}) tiene que redactarse en ese mismo
+idioma, aunque estas instrucciones estén en español. La notación matemática (LaTeX) no cambia.\n`;
+}
+
+export function armarPromptClaude(tipo, materia, tema, idioma = "es") {
   if (tipo === "formula") {
     return {
       system: `Sos un asistente que identifica la fórmula principal de un tema de matemática/estadística para una biblioteca educativa (materia: "${materia}", tema: "${tema}").
 Es la fórmula que resume el tema, la que se muestra como título/encabezado.
 Devolvé SOLO un JSON válido con esta forma: {"formula": "string en LaTeX"}.
-
+${bloqueIdioma(idioma, "etiqueta")}
 Si el tema tiene UNA sola fórmula que lo resume, devolvé esa fórmula sola, sin envoltorio extra.
 
 Si el tema tiene VARIAS fórmulas igual de importantes (ej: "Integrales definidas e indefinidas" tiene
@@ -147,6 +123,7 @@ No agregues texto fuera del JSON.`,
   return {
     system: `Sos un asistente que arma bancos de preguntas de opción múltiple para una biblioteca educativa (materia: "${materia}", tema: "${tema}").
 ${INSTRUCCIONES_POR_TIPO[tipo]}
+${bloqueIdioma(idioma)}
 Devolvé SOLO un JSON válido con esta forma exacta:
 {
   "modelos": [
@@ -166,26 +143,14 @@ No repitas preguntas entre modelos. No agregues texto fuera del JSON.`,
   };
 }
 
-/**
- * Prompt para Mistral (IA que CORRIGE el borrador de Claude).
- * tipo: "practice" | "exam" | "formula"
- * borrador: el objeto JSON ya parseado que devolvió Claude.
- *
- * Para tipo="exam" este ya no es el corrector principal: generar.js
- * intenta primero con Fable (armarPromptCorreccionFable, más abajo) y
- * solo llama a esto si Fable falla o no valida -- ver
- * intentarCorregirConFable/intentarCorregirConMistral en generar.js.
- * El texto de este prompt no se tocó a propósito (para no cambiar el
- * comportamiento ya validado de practice/formula, que lo siguen usando
- * como corrector único).
- */
-export function armarPromptMistral(tipo, borrador) {
+export function armarPromptMistral(tipo, borrador, idioma = "es") {
   if (tipo === "formula") {
     return {
       system: `Revisá esta fórmula principal del tema. Corregí errores matemáticos o LaTeX mal formado.
 Si el campo "formula" tiene varias fórmulas dentro de un bloque \\begin{gathered}...\\end{gathered}
 separadas por \\\\, mantené esa estructura -- es el formato esperado para temas con más de una fórmula
 central, no lo deshagas ni lo juntes en una sola línea.
+${bloqueIdioma(idioma, "etiqueta")}
 Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuera del JSON.`,
       prompt: JSON.stringify(borrador),
     };
@@ -194,39 +159,21 @@ Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuer
   return {
     system: `Revisá este borrador de banco de preguntas. Corregí errores matemáticos, ambigüedades en el enunciado,
 opciones repetidas o mal armadas, y que "respuesta_correcta" apunte realmente a la opción correcta.
-Mantené la cantidad de modelos y de preguntas por modelo tal cual está. Devolvé el JSON corregido completo
-con la misma forma. Sin texto fuera del JSON.`,
+Mantené la cantidad de modelos y de preguntas por modelo tal cual está.
+${bloqueIdioma(idioma)}
+Devolvé el JSON corregido completo con la misma forma. Sin texto fuera del JSON.`,
     prompt: JSON.stringify(borrador),
   };
 }
 
-/**
- * Prompt para Opus (IA que CORRIGE el borrador con re-derivación
- * explícita; antes lo corría Fable, mismo prompt, solo cambió el
- * modelo). Se usa para "exam" siempre, y ahora también para
- * "practice"/"formula" como corrector -- ver MODELO_CLAUDE_POR_TIPO en
- * generar.js. A diferencia del prompt de Mistral -- que pide "corregí
- * errores matemáticos" como una línea entre varias otras tareas de
- * proofreading -- este es explícito paso a paso: pide RE-DERIVAR cada
- * función antes de mirar qué opción quedó marcada, en vez de leer el
- * texto y juzgar si "suena" coherente. Esto es deliberado: un borrador
- * puede tener una explicación con álgebra correcta y un resultado
- * final que la contradice (visto en auditoría manual de un examen real
- * de "Cálculo / Derivadas" -- 4 de 71 preguntas con ese patrón), que un
- * chequeo superficial de coherencia textual no atrapa pero un
- * recálculo sí.
- *
- * Si esta corrección falla o no valida, generar.js cae a
- * armarPromptMistral como fallback -- ver intentarCorregirConOpus /
- * intentarCorregirConMistral ahí.
- */
-export function armarPromptCorreccionFable(tipo, borrador) {
+export function armarPromptCorreccionFable(tipo, borrador, idioma = "es") {
   if (tipo === "formula") {
     return {
       system: `Revisá esta fórmula principal del tema. Corregí errores matemáticos o LaTeX mal formado.
 Si el campo "formula" tiene varias fórmulas dentro de un bloque \\begin{gathered}...\\end{gathered}
 separadas por \\\\, mantené esa estructura -- es el formato esperado para temas con más de una fórmula
 central, no lo deshagas ni lo juntes en una sola línea.
+${bloqueIdioma(idioma, "etiqueta")}
 Guardá la fórmula corregida con la herramienta.`,
       prompt: JSON.stringify(borrador),
     };
@@ -245,8 +192,9 @@ en este orden:
    opciones son idénticas, reescribí una de las incorrectas para que sea un distractor plausible pero
    distinto.
 4. Revisá ambigüedades en el enunciado y que la explicación no se contradiga con el resultado final.
-No cambies la cantidad de modelos ni de preguntas por modelo. Guardá el banco corregido completo con la
-herramienta.`,
+No cambies la cantidad de modelos ni de preguntas por modelo.
+${bloqueIdioma(idioma)}
+Guardá el banco corregido completo con la herramienta.`,
     prompt: JSON.stringify(borrador),
   };
 }
