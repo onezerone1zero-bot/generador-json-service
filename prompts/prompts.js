@@ -1,3 +1,8 @@
+// ASUNCIÓN A CONFIRMAR: no tenemos el contenido real de practice.js/exam.js
+// del frontend en este chat, así que este es el schema de "pregunta" que
+// asumimos (multiple choice con 4 opciones). Si el frontend espera otra
+// forma, se cambia ACÁ nomás -- es el único lugar donde hay que tocar algo,
+// tanto para el schema como para el texto de los prompts.
 export const PREGUNTA_SCHEMA_EJEMPLO = {
   enunciado: "string, puede incluir LaTeX entre $...$",
   opciones: ["string", "string", "string", "string"],
@@ -14,11 +19,23 @@ const INSTRUCCIONES_POR_TIPO = {
     "Generá las fórmulas clave del tema (las que se muestran en el título/encabezado del tema), en LaTeX, con una etiqueta corta de qué es cada una.",
 };
 
+// Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
+// 3 modelos free de 12 preguntas cada uno para el examen (antes 10) --
+// practice se mantiene en 10, que es lo que ya venía funcionando.
 const PREGUNTAS_POR_MODELO = {
   practice: 10,
   exam: 12,
 };
 
+/**
+ * Tool schema para forzar a Claude a devolver JSON válido por
+ * construcción (tool use), en vez de texto libre que hay que parsear
+ * después con extraerJson(). Con tool_choice forzado, la API de
+ * Anthropic valida la respuesta contra este schema del lado del
+ * servidor antes de devolverla -- elimina la clase entera de errores
+ * de "JSON mal formado" (comillas faltantes, comas colgantes, etc.)
+ * que puede meter un modelo escribiendo texto suelto.
+ */
 export function armarToolClaude(tipo) {
   if (tipo === "formula") {
     return {
@@ -81,6 +98,17 @@ export function armarToolClaude(tipo) {
   };
 }
 
+/**
+ * Tool schema para la CORRECCIÓN con Fable (misma forma que
+ * armarToolClaude, pero con nombre/descripción propios de un paso de
+ * revisión en vez de creación). Se reusa la construcción del schema en
+ * vez de duplicarlo a mano, así ambos tools quedan garantizados
+ * idénticos en forma -- si se cambia el schema de preguntas en un
+ * lugar (ej: agregar un campo nuevo a "pregunta"), automáticamente
+ * aplica a los dos pasos sin tener que recordar tocar dos sitios.
+ * Usada hoy solo para tipo="exam" -- ver MODELO_CLAUDE_POR_TIPO en
+ * generar.js.
+ */
 export function armarToolCorreccion(tipo) {
   const toolBase = armarToolClaude(tipo);
   if (tipo === "formula") {
@@ -89,6 +117,31 @@ export function armarToolCorreccion(tipo) {
   return { ...toolBase, name: "guardar_banco_preguntas_corregido", description: `Guarda el banco de preguntas de ${tipo} corregido para el tema.` };
 }
 
+/**
+ * Bloque de instrucción de idioma, compartido por las tres funciones de
+ * este archivo (armarPromptClaude, armarPromptMistral,
+ * armarPromptCorreccionFable). Vacío para "es" (no cambia el texto para
+ * la instancia española); para cualquier otro idioma, le dice
+ * explícitamente a la IA que redacte el contenido en ese idioma.
+ *
+ * FIX (soporte de idioma, ver ANALISIS-idioma-generador-json.md, punto 3):
+ * antes ninguna de las tres funciones recibía idioma, y el system entero
+ * estaba hardcodeado en español sin indicar en qué idioma debía salir el
+ * contenido generado -- si `materia`/`tema` llegaban en otro idioma, no
+ * había nada que le impidiera a la IA redactar igual en español.
+ *
+ * IMPORTANTE: este bloque se usa en las TRES funciones, no solo en
+ * armarPromptClaude. armarPromptCorreccionFable en particular RE-DERIVA
+ * cada pregunta desde cero (no solo revisa forma) -- si a esta le
+ * faltara el bloque, un borrador correcto en inglés podría volver
+ * corregido en español sin que validarEstructura.js lo detecte (valida
+ * forma, no idioma).
+ *
+ * @param {string} idioma
+ * @param {string} [campoExtra] - nombre de un campo adicional a
+ *   mencionar en la lista de campos a redactar (ej. "etiqueta" para
+ *   formula). Si no se pasa, no se agrega ningún campo extra.
+ */
 function bloqueIdioma(idioma, campoExtra) {
   if (!idioma || idioma === "es") return "";
   const campos = ["enunciado", "opciones", "explicacion", ...(campoExtra ? [campoExtra] : [])].join(", ");
@@ -97,6 +150,12 @@ function bloqueIdioma(idioma, campoExtra) {
 idioma, aunque estas instrucciones estén en español. La notación matemática (LaTeX) no cambia.\n`;
 }
 
+/**
+ * Prompt para Claude (IA que CREA el primer borrador).
+ * tipo: "practice" | "exam" | "formula"
+ * idioma: código de idioma de esta instancia (ver process.env.IDIOMA en
+ *   generar.js). Default "es" -- no cambia el texto existente.
+ */
 export function armarPromptClaude(tipo, materia, tema, idioma = "es") {
   if (tipo === "formula") {
     return {
@@ -143,6 +202,23 @@ No repitas preguntas entre modelos. No agregues texto fuera del JSON.`,
   };
 }
 
+/**
+ * Prompt para Mistral (IA que CORRIGE el borrador de Claude).
+ * tipo: "practice" | "exam" | "formula"
+ * borrador: el objeto JSON ya parseado que devolvió Claude.
+ *
+ * Para tipo="exam" este ya no es el corrector principal: generar.js
+ * intenta primero con Fable (armarPromptCorreccionFable, más abajo) y
+ * solo llama a esto si Fable falla o no valida -- ver
+ * intentarCorregirConFable/intentarCorregirConMistral en generar.js.
+ * El texto de este prompt no se tocó a propósito (para no cambiar el
+ * comportamiento ya validado de practice/formula, que lo siguen usando
+ * como corrector único), más allá de sumar el bloque de idioma (ver
+ * bloqueIdioma arriba) -- necesario para que la corrección no reescriba
+ * el borrador de vuelta al español.
+ *
+ * idioma: mismo parámetro que armarPromptClaude, default "es".
+ */
 export function armarPromptMistral(tipo, borrador, idioma = "es") {
   if (tipo === "formula") {
     return {
@@ -166,6 +242,33 @@ Devolvé el JSON corregido completo con la misma forma. Sin texto fuera del JSON
   };
 }
 
+/**
+ * Prompt para Opus (IA que CORRIGE el borrador con re-derivación
+ * explícita; antes lo corría Fable, mismo prompt, solo cambió el
+ * modelo). Se usa para "exam" siempre, y ahora también para
+ * "practice"/"formula" como corrector -- ver MODELO_CLAUDE_POR_TIPO en
+ * generar.js. A diferencia del prompt de Mistral -- que pide "corregí
+ * errores matemáticos" como una línea entre varias otras tareas de
+ * proofreading -- este es explícito paso a paso: pide RE-DERIVAR cada
+ * función antes de mirar qué opción quedó marcada, en vez de leer el
+ * texto y juzgar si "suena" coherente. Esto es deliberado: un borrador
+ * puede tener una explicación con álgebra correcta y un resultado
+ * final que la contradice (visto en auditoría manual de un examen real
+ * de "Cálculo / Derivadas" -- 4 de 71 preguntas con ese patrón), que un
+ * chequeo superficial de coherencia textual no atrapa pero un
+ * recálculo sí.
+ *
+ * Si esta corrección falla o no valida, generar.js cae a
+ * armarPromptMistral como fallback -- ver intentarCorregirConOpus /
+ * intentarCorregirConMistral ahí.
+ *
+ * idioma: mismo parámetro que armarPromptClaude, default "es". Ver la
+ * advertencia en el comentario de bloqueIdioma() sobre por qué este
+ * parámetro es tan importante ACÁ como en armarPromptClaude: esta
+ * función re-deriva el contenido desde cero, así que sin el bloque de
+ * idioma puede devolver el banco corregido en español aunque el
+ * borrador de entrada estuviera en otro idioma.
+ */
 export function armarPromptCorreccionFable(tipo, borrador, idioma = "es") {
   if (tipo === "formula") {
     return {

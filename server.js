@@ -2,11 +2,16 @@ import express from "express";
 import { generarYGuardarJSON } from "./lib/generar.js";
 import { validarEnv } from "./lib/validarEnv.js";
 
+// Validar variables de entorno antes de hacer cualquier cosa
 validarEnv();
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 
+// Auth simple entre generador-service-main (quien dispara esto) y este
+// servicio -- mismo esquema que generador-service-main/src/server.js.
+// SERVICE_KEY acá es una clave DISTINTA a la del otro service (ver
+// .env.example): si alguna se filtra, la otra sigue segura.
 function chequearAuth(req, res) {
   const auth = req.headers.authorization || "";
   const token = auth.replace("Bearer ", "");
@@ -17,6 +22,32 @@ function chequearAuth(req, res) {
   return true;
 }
 
+/**
+ * POST /generar-json
+ * Body: { materia, tema, tipos?, temaCanonico? }
+ *   tipos (opcional): subset de ["practice", "exam", "formula"].
+ *   Default: ["practice", "exam", "formula"].
+ *   temaCanonico (opcional): título del tema en el índice canónico
+ *     (español), si el llamador ya lo resolvió contra ese índice. Ver
+ *     nota en lib/generar.js (generarYGuardarJSON) -- sin esto, la key
+ *     de KV se arma con slugify(tema) tal cual (comportamiento previo).
+ *
+ * Llamado por generador-service-main después de generar el contenido
+ * teórico de un tema (mismo tema, mismo slug). Para cada tipo pedido
+ * corre Claude/Fable (crea) + un corrector -- Mistral para
+ * practice/formula, Fable con Mistral de fallback para exam, ver
+ * lib/generar.js -- y guarda cada resultado en KV (namespaces
+ * separados por tipo, keys "practice:<slug>" / "exam:<slug>" /
+ * "formulas:<slug>", con sufijo "_<idioma>" si esta instancia no es la
+ * española -- ver process.env.IDIOMA en lib/generar.js y sufijoIdioma()
+ * en lib/kv.js).
+ *
+ * Es síncrono (como /generar en el otro service): espera el resultado y
+ * lo devuelve en la misma response. Si en el futuro esto tarda demasiado
+ * (varios tipos x 2 llamadas de IA c/u), se puede pasar a un patrón de
+ * cola + callback como /crear-tema-callback del otro service -- por ahora,
+ * con 2-3 tipos, un request síncrono alcanza.
+ */
 app.post("/generar-json", async (req, res) => {
   if (!chequearAuth(req, res)) return;
 
@@ -34,6 +65,9 @@ app.post("/generar-json", async (req, res) => {
 
   try {
     const resultado = await generarYGuardarJSON({ materia, tema, tipos: tiposPedidos, temaCanonico });
+    // Si algún tipo falló pero otros salieron bien, devolvemos 207-like
+    // (200 con ok:false y detalle) en vez de 500 -- así generador-service-main
+    // puede decidir qué hacer con el resultado parcial en vez de perderlo todo.
     res.json(resultado);
   } catch (err) {
     console.error("[generar-json] error:", err);
