@@ -24,23 +24,26 @@ function chequearAuth(req, res) {
 
 /**
  * POST /generar-json
- * Body: { materia, tema, tipos?, temaCanonico? }
+ * Body: { materia, tema, tipos?, temaCanonico?, idioma? }
  *   tipos (opcional): subset de ["practice", "exam", "formula"].
  *   Default: ["practice", "exam", "formula"].
  *   temaCanonico (opcional): título del tema en el índice canónico
  *     (español), si el llamador ya lo resolvió contra ese índice. Ver
  *     nota en lib/generar.js (generarYGuardarJSON) -- sin esto, la key
  *     de KV se arma con slugify(tema) tal cual (comportamiento previo).
+ *   idioma (opcional, default "es"): idioma destino del contenido. Esta
+ *     instancia ya no tiene un idioma fijo propio (antes salía de
+ *     process.env.IDIOMA) -- lo manda generador-service-main en cada
+ *     request, con el mismo idioma con el que generó la teoría.
  *
  * Llamado por generador-service-main después de generar el contenido
- * teórico de un tema (mismo tema, mismo slug). Para cada tipo pedido
- * corre Claude/Fable (crea) + un corrector -- Mistral para
+ * teórico de un tema (mismo tema, mismo slug, mismo idioma). Para cada
+ * tipo pedido corre Claude/Fable (crea) + un corrector -- Mistral para
  * practice/formula, Fable con Mistral de fallback para exam, ver
  * lib/generar.js -- y guarda cada resultado en KV (namespaces
  * separados por tipo, keys "practice:<slug>" / "exam:<slug>" /
- * "formulas:<slug>", con sufijo "_<idioma>" si esta instancia no es la
- * española -- ver process.env.IDIOMA en lib/generar.js y sufijoIdioma()
- * en lib/kv.js).
+ * "formulas:<slug>", con sufijo "_<idioma>" si el idioma pedido no es
+ * español -- ver lib/kv.js).
  *
  * Es síncrono (como /generar en el otro service): espera el resultado y
  * lo devuelve en la misma response. Si en el futuro esto tarda demasiado
@@ -51,7 +54,7 @@ function chequearAuth(req, res) {
 app.post("/generar-json", async (req, res) => {
   if (!chequearAuth(req, res)) return;
 
-  const { materia, tema, tipos, temaCanonico } = req.body || {};
+  const { materia, tema, tipos, temaCanonico, idioma } = req.body || {};
   if (!materia || !tema) {
     return res.status(400).json({ error: "Faltan materia o tema" });
   }
@@ -64,7 +67,7 @@ app.post("/generar-json", async (req, res) => {
   }
 
   try {
-    const resultado = await generarYGuardarJSON({ materia, tema, tipos: tiposPedidos, temaCanonico });
+    const resultado = await generarYGuardarJSON({ materia, tema, tipos: tiposPedidos, temaCanonico, idioma: (idioma || "es").trim() });
     // Si algún tipo falló pero otros salieron bien, devolvemos 207-like
     // (200 con ok:false y detalle) en vez de 500 -- así generador-service-main
     // puede decidir qué hacer con el resultado parcial en vez de perderlo todo.
