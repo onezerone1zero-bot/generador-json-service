@@ -19,6 +19,14 @@ const INSTRUCCIONES_POR_TIPO = {
     "Generá las fórmulas clave del tema (las que se muestran en el título/encabezado del tema), en LaTeX, con una etiqueta corta de qué es cada una.",
 };
 
+// Gramática EXACTA que acepta el graficador del frontend (visual.js) y
+// que revalida formulaSegura.js del lado del server -- ver ese archivo.
+// Se repite el texto en el prompt (no solo en el schema del tool) porque
+// tool_choice forzado garantiza la FORMA del JSON ({"formula": "..."}),
+// no que el contenido de "formula" respete esta gramática -- eso lo
+// sigue validando validarVisual() después.
+const FUNCIONES_PERMITIDAS_VISUAL = "sin, cos, tan, sqrt, abs, exp, log";
+
 // Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
 // 3 modelos free de 12 preguntas cada uno para el examen (antes 10) --
 // practice se mantiene en 10, que es lo que ya venía funcionando.
@@ -45,6 +53,23 @@ export function armarToolClaude(tipo) {
         type: "object",
         properties: {
           formula: { type: "string", description: "Fórmula en LaTeX" },
+        },
+        required: ["formula"],
+      },
+    };
+  }
+
+  if (tipo === "visual") {
+    return {
+      name: "guardar_formula_visual",
+      description: "Guarda la fórmula default para el graficador interactivo del tema.",
+      input_schema: {
+        type: "object",
+        properties: {
+          formula: {
+            type: "string",
+            description: `Expresión evaluable en x e y (no LaTeX). Solo puede usar: números, las variables x/y, las constantes pi/e, los operadores + - * / ^ ( ), y estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Ejemplo: "sin(x)*cos(y)".`,
+          },
         },
         required: ["formula"],
       },
@@ -114,6 +139,9 @@ export function armarToolCorreccion(tipo) {
   if (tipo === "formula") {
     return { ...toolBase, name: "guardar_formula_corregida", description: "Guarda la fórmula corregida del tema." };
   }
+  if (tipo === "visual") {
+    return { ...toolBase, name: "guardar_formula_visual_corregida", description: "Guarda la fórmula visual corregida del tema." };
+  }
   return { ...toolBase, name: "guardar_banco_preguntas_corregido", description: `Guarda el banco de preguntas de ${tipo} corregido para el tema.` };
 }
 
@@ -177,6 +205,31 @@ No agregues texto fuera del JSON.`,
     };
   }
 
+  if (tipo === "visual") {
+    return {
+      system: `Sos un asistente que elige una fórmula matemática representativa de un tema, para precargar
+el campo de un graficador interactivo (materia: "${materia}", tema: "${tema}"). La fórmula que elijas es
+solo el valor DEFAULT del campo -- el usuario después la puede editar y también elige si la ve como
+gráfico 2D o como superficie 3D con los mismos botones, así que no hace falta que decidas eso: alcanza
+con que sea una expresión razonable en x e y que ilustre bien una idea central del tema.
+Devolvé SOLO un JSON válido con esta forma: {"formula": "string"}.
+
+REGLA DURA sobre el contenido de "formula" (no es LaTeX, es una expresión que un parser simple tiene
+que poder evaluar tal cual):
+- Solo podés usar: números, las variables x e y, las constantes pi y e, los operadores + - * / ^ ( ),
+  y EXCLUSIVAMENTE estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.
+- Nada de LaTeX (sin \\frac, sin ^{}, sin subíndices), nada de comas, nada de otras funciones
+  (nunca pow/cosh/atan/log10/etc.), nada de variables que no sean x/y.
+- Multiplicación implícita está permitida (ej. "2x" o "(x+1)y"), pero preferí "*" explícito salvo que
+  sea un caso claro como coeficiente pegado a la variable.
+- Máximo 400 caracteres, y preferí algo simple y visualmente claro (ideal: menos de 60 caracteres).
+${bloqueIdioma(idioma)}
+Ejemplos válidos: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "sqrt(abs(x*y))".
+No agregues texto fuera del JSON.`,
+      prompt: `Materia: ${materia}\nTema: ${tema}`,
+    };
+  }
+
   const cantidad = PREGUNTAS_POR_MODELO[tipo] ?? 10;
 
   return {
@@ -232,6 +285,19 @@ Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuer
     };
   }
 
+  if (tipo === "visual") {
+    return {
+      system: `Revisá esta fórmula visual. Tiene que ser una expresión evaluable en x e y -- NO LaTeX -- que
+solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
+${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
+variable, una coma), reescribila para que quede dentro de esas reglas sin cambiar demasiado la idea
+matemática original.
+${bloqueIdioma(idioma)}
+Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuera del JSON.`,
+      prompt: JSON.stringify(borrador),
+    };
+  }
+
   return {
     system: `Revisá este borrador de banco de preguntas. Corregí errores matemáticos, ambigüedades en el enunciado,
 opciones repetidas o mal armadas, y que "respuesta_correcta" apunte realmente a la opción correcta.
@@ -278,6 +344,19 @@ separadas por \\\\, mantené esa estructura -- es el formato esperado para temas
 central, no lo deshagas ni lo juntes en una sola línea.
 ${bloqueIdioma(idioma, "etiqueta")}
 Guardá la fórmula corregida con la herramienta.`,
+      prompt: JSON.stringify(borrador),
+    };
+  }
+
+  if (tipo === "visual") {
+    return {
+      system: `Revisá esta fórmula visual. Tiene que ser una expresión evaluable en x e y -- NO LaTeX -- que
+solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
+${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
+variable, una coma), reescribila para que quede dentro de esas reglas sin cambiar demasiado la idea
+matemática original.
+${bloqueIdioma(idioma)}
+Guardá la fórmula visual corregida con la herramienta.`,
       prompt: JSON.stringify(borrador),
     };
   }

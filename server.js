@@ -25,8 +25,10 @@ function chequearAuth(req, res) {
 /**
  * POST /generar-json
  * Body: { materia, tema, tipos?, temaCanonico?, idioma? }
- *   tipos (opcional): subset de ["practice", "exam", "formula"].
- *   Default: ["practice", "exam", "formula"].
+ *   tipos (opcional): subset de ["practice", "exam", "formula", "visual"].
+ *   Default: ["practice", "exam", "formula"] -- "visual" (fórmula default
+ *   del graficador interactivo) no entra en el default, solo se genera
+ *   si se pide explícitamente.
  *   temaCanonico (opcional): título del tema en el índice canónico
  *     (español), si el llamador ya lo resolvió contra ese índice. Ver
  *     nota en lib/generar.js (generarYGuardarJSON) -- sin esto, la key
@@ -59,7 +61,7 @@ app.post("/generar-json", async (req, res) => {
     return res.status(400).json({ error: "Faltan materia o tema" });
   }
 
-  const tiposValidos = ["practice", "exam", "formula"];
+  const tiposValidos = ["practice", "exam", "formula", "visual"];
   const tiposPedidos = Array.isArray(tipos) && tipos.length > 0 ? tipos : ["practice", "exam", "formula"];
   const tiposInvalidos = tiposPedidos.filter((t) => !tiposValidos.includes(t));
   if (tiposInvalidos.length > 0) {
