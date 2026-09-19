@@ -25,7 +25,11 @@ const INSTRUCCIONES_POR_TIPO = {
 // tool_choice forzado garantiza la FORMA del JSON ({"formula": "..."}),
 // no que el contenido de "formula" respete esta gramática -- eso lo
 // sigue validando validarVisual() después.
-const FUNCIONES_PERMITIDAS_VISUAL = "sin, cos, tan, sqrt, abs, exp, log";
+// ACTUALIZADO: esta lista estaba desincronizada de la real -- le faltaban
+// asin/acos/atan/cbrt/log2/ln, que visual.js ya soporta hace rato. Tiene
+// que coincidir EXACTAMENTE con FUNCIONES_PERMITIDAS de lib/formulaSegura.js
+// (que a su vez espeja FUNCIONES_PERMITIDAS_FORMULA de visual.js).
+const FUNCIONES_PERMITIDAS_VISUAL = "sin, cos, tan, asin, acos, atan, sqrt, cbrt, abs, exp, log, log2, ln";
 const MAX_FORMULAS_VISUAL = 6; // tiene que coincidir con MAX_FORMULAS_VISUAL de lib/validarEstructura.js
 
 // Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
@@ -77,7 +81,7 @@ export function armarToolClaude(tipo) {
               properties: {
                 formula: {
                   type: "string",
-                  description: `Expresión evaluable en x e y (no LaTeX). Solo puede usar: números, las variables x/y, las constantes pi/e, los operadores + - * / ^ ( ), y estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Ejemplo: "sin(x)*cos(y)".`,
+                  description: `Expresión evaluable, NO LaTeX -- ver el system prompt para el detalle completo. Tres formatos posibles: (1) explícita en x/y, ej. "sin(x)*cos(y)"; (2) implícita "izquierda=derecha" en x/y o x/y/z, ej. "x^2+y^2=25"; (3) paramétrica, tres líneas "x=...\\ny=...\\nz=..." en u/v. Solo puede usar números, esas variables, pi/e, los operadores + - * / ^ ( ), y estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.`,
                 },
               },
               required: ["formula"],
@@ -235,17 +239,38 @@ CUÁNTAS: elegí entre 1 y ${MAX_FORMULAS_VISUAL} fórmulas, según lo que el te
 - No mezcles fórmulas de 2D (solo x) con superficies 3D (x e y) en la misma lista salvo que el tema lo pida:
   se grafican todas en el mismo modo, y una función solo de x se ve como una pared en 3D.
 
+FORMATOS que podés usar para cada "formula" (elegí el que mejor se ajuste al tema, no fuerces uno):
+1) EXPLÍCITA (el caso más común): expresión evaluable en x e y, sin "=". Ej: "sin(x)*cos(y)", "x^2-y^2".
+2) IMPLÍCITA ("izquierda = derecha", en x/y o x/y/z para una superficie): usala para círculos, elipses,
+   curvas de nivel o superficies que NO se pueden despejar como "y=..." o "z=..." sin perder la mitad de
+   la curva. Ej: "x^2+y^2=25" (circunferencia completa -- mejor que "y=sqrt(25-x^2)", que solo muestra la
+   mitad de arriba), "x^2/9+y^2/4=1" (elipse), "x^2+y^2+z^2=25" (esfera, superficie 3D).
+3) PARAMÉTRICA (tres líneas "x=...", "y=...", "z=..." dentro del mismo string, cada una en función de u
+   y/o v): usala para superficies o curvas 3D que no son el gráfico de una función (planos, helicoides,
+   superficies regladas). Cada línea tiene que depender de u y/o v -- si las tres dependen solo de u
+   (o ninguna depende de ninguna), da una superficie degenerada. El rango por defecto es u∈[0,2π],
+   v∈[-1,1]: elegí algo que se vea bien EN ESE rango, no asumas que podés pedir otro. Ej. de un plano:
+   {"formula": "x=u\ny=v\nz=u+v"}
+
 REGLA DURA sobre el contenido de cada "formula" (no es LaTeX, es una expresión que un parser simple tiene
-que poder evaluar tal cual):
-- Solo podés usar: números, las variables x e y, las constantes pi y e, los operadores + - * / ^ ( ),
-  y EXCLUSIVAMENTE estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.
+que poder evaluar tal cual), aplica a las tres partes de cualquiera de los formatos de arriba:
+- Solo podés usar: números, las variables que correspondan al formato (x/y en explícita; x/y/z en
+  implícita; u/v en paramétrica), las constantes pi y e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE
+  estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.
 - Nada de LaTeX (sin \\frac, sin ^{}, sin subíndices), nada de comas, nada de otras funciones
-  (nunca pow/cosh/atan/log10/etc.), nada de variables que no sean x/y, nada de "y =" ni "f(x) =".
+  (nunca pow/cosh/log10/etc.), nada de variables sueltas fuera de esa lista, nada de "y =" antepuesto a
+  una explícita (para eso está el formato implícita) ni "f(x) =".
 - Multiplicación implícita está permitida (ej. "2x" o "(x+1)y"), pero preferí "*" explícito salvo que
   sea un caso claro como coeficiente pegado a la variable.
-- Máximo 400 caracteres por fórmula, y preferí algo simple y visualmente claro (ideal: menos de 60).
+- Máximo 400 caracteres para explícita/implícita; hasta 800 en total (con los saltos de línea incluidos)
+  para una paramétrica de 3 líneas. Preferí siempre algo simple y visualmente claro.
+- EVITÁ que la fórmula dé una pantalla vacía o inútil dentro del rango default: que no sea constante
+  (ej. "0*x+5"), que no quede indefinida en casi todo el rango x,y∈[-10,10] (ej. "log(x-100)"), que no se
+  dispare a valores absurdos ahí (ej. "exp(x)" ya da ~22000 en x=10), y si es implícita, que realmente
+  tenga solución real en ese rango (que cambie de signo en algún punto, no que un lado del "=" domine
+  siempre al otro).
 ${bloqueIdioma(idioma)}
-Ejemplos válidos de una fórmula: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "sqrt(abs(x*y))".
+Ejemplos válidos: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "x^2+y^2=25".
 Ejemplo de tema comparativo: {"formulas": [{"formula": "x^2"}, {"formula": "2*x"}]}.
 No agregues texto fuera del JSON.`,
       prompt: `Materia: ${materia}\nTema: ${tema}`,
@@ -309,11 +334,22 @@ Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuer
 
   if (tipo === "visual") {
     return {
-      system: `Revisá estas fórmulas visuales (una lista en "formulas"). Cada una tiene que ser una expresión evaluable
-en x e y -- NO LaTeX -- que solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE
-estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función,
-LaTeX, otra variable, una coma, "y =" al principio), reescribila para que quede dentro de esas reglas sin
-cambiar demasiado la idea matemática original.
+      system: `Revisá estas fórmulas visuales (una lista en "formulas"). Cada una tiene que estar en uno de estos
+formatos -- NO LaTeX:
+- Explícita: expresión evaluable en x e y, sin "=".
+- Implícita: "izquierda = derecha" en x/y (o x/y/z para una superficie 3D) -- para círculos, elipses o
+  superficies que no se pueden despejar sin perder la mitad de la curva.
+- Paramétrica: tres líneas "x=...", "y=...", "z=..." dentro del mismo string, cada una en función de u y/o v.
+En cualquiera de los tres, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
+en implícita; u/v en paramétrica), pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
+${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
+variable, una coma, "y =" antepuesto a una explícita, "f(x) ="), reescribila para que quede dentro de estas
+reglas sin cambiar demasiado la idea matemática original -- si la idea es un círculo o superficie que solo
+se puede expresar de forma implícita o paramétrica, NO la fuerces a explícita aunque eso implique perder
+la mitad de la curva.
+También corregí, sin cambiar el formato elegido, si la fórmula da una pantalla vacía o inútil: constante,
+indefinida en casi todo el rango x,y∈[-10,10] (o u∈[0,2π], v∈[-1,1] en paramétrica), que se dispara a
+valores absurdos ahí, o que -siendo implícita- no tiene solución real en ese rango (no cambia de signo).
 Reglas de la lista: conservá la MISMA cantidad de fórmulas y el MISMO orden (la primera es la principal);
 no agregues ni quites fórmulas salvo que haya dos repetidas o equivalentes triviales, en cuyo caso quitá la
 repetida; máximo ${MAX_FORMULAS_VISUAL}. Si algún item trae "color", dejalo tal cual.
@@ -375,11 +411,22 @@ Guardá la fórmula corregida con la herramienta.`,
 
   if (tipo === "visual") {
     return {
-      system: `Revisá estas fórmulas visuales (una lista en "formulas"). Cada una tiene que ser una expresión evaluable
-en x e y -- NO LaTeX -- que solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE
-estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función,
-LaTeX, otra variable, una coma, "y =" al principio), reescribila para que quede dentro de esas reglas sin
-cambiar demasiado la idea matemática original.
+      system: `Revisá estas fórmulas visuales (una lista en "formulas"). Cada una tiene que estar en uno de estos
+formatos -- NO LaTeX:
+- Explícita: expresión evaluable en x e y, sin "=".
+- Implícita: "izquierda = derecha" en x/y (o x/y/z para una superficie 3D) -- para círculos, elipses o
+  superficies que no se pueden despejar sin perder la mitad de la curva.
+- Paramétrica: tres líneas "x=...", "y=...", "z=..." dentro del mismo string, cada una en función de u y/o v.
+En cualquiera de los tres, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
+en implícita; u/v en paramétrica), pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
+${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
+variable, una coma, "y =" antepuesto a una explícita, "f(x) ="), reescribila para que quede dentro de estas
+reglas sin cambiar demasiado la idea matemática original -- si la idea es un círculo o superficie que solo
+se puede expresar de forma implícita o paramétrica, NO la fuerces a explícita aunque eso implique perder
+la mitad de la curva.
+También corregí, sin cambiar el formato elegido, si la fórmula da una pantalla vacía o inútil: constante,
+indefinida en casi todo el rango x,y∈[-10,10] (o u∈[0,2π], v∈[-1,1] en paramétrica), que se dispara a
+valores absurdos ahí, o que -siendo implícita- no tiene solución real en ese rango (no cambia de signo).
 Reglas de la lista: conservá la MISMA cantidad de fórmulas y el MISMO orden (la primera es la principal);
 no agregues ni quites fórmulas salvo que haya dos repetidas o equivalentes triviales, en cuyo caso quitá la
 repetida; máximo ${MAX_FORMULAS_VISUAL}. Si algún item trae "color", dejalo tal cual.
