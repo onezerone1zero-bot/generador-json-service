@@ -26,6 +26,7 @@ const INSTRUCCIONES_POR_TIPO = {
 // no que el contenido de "formula" respete esta gramática -- eso lo
 // sigue validando validarVisual() después.
 const FUNCIONES_PERMITIDAS_VISUAL = "sin, cos, tan, sqrt, abs, exp, log";
+const MAX_FORMULAS_VISUAL = 6; // tiene que coincidir con MAX_FORMULAS_VISUAL de lib/validarEstructura.js
 
 // Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
 // 3 modelos free de 12 preguntas cada uno para el examen (antes 10) --
@@ -61,17 +62,29 @@ export function armarToolClaude(tipo) {
 
   if (tipo === "visual") {
     return {
-      name: "guardar_formula_visual",
-      description: "Guarda la fórmula default para el graficador interactivo del tema.",
+      name: "guardar_formulas_visual",
+      description: "Guarda las fórmulas que se grafican por defecto en el graficador interactivo del tema.",
       input_schema: {
         type: "object",
         properties: {
-          formula: {
-            type: "string",
-            description: `Expresión evaluable en x e y (no LaTeX). Solo puede usar: números, las variables x/y, las constantes pi/e, los operadores + - * / ^ ( ), y estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Ejemplo: "sin(x)*cos(y)".`,
+          formulas: {
+            type: "array",
+            minItems: 1,
+            maxItems: MAX_FORMULAS_VISUAL,
+            description: `Entre 1 y ${MAX_FORMULAS_VISUAL} fórmulas distintas que se grafican juntas, cada una con su color. La primera es la principal.`,
+            items: {
+              type: "object",
+              properties: {
+                formula: {
+                  type: "string",
+                  description: `Expresión evaluable en x e y (no LaTeX). Solo puede usar: números, las variables x/y, las constantes pi/e, los operadores + - * / ^ ( ), y estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Ejemplo: "sin(x)*cos(y)".`,
+                },
+              },
+              required: ["formula"],
+            },
           },
         },
-        required: ["formula"],
+        required: ["formulas"],
       },
     };
   }
@@ -140,7 +153,7 @@ export function armarToolCorreccion(tipo) {
     return { ...toolBase, name: "guardar_formula_corregida", description: "Guarda la fórmula corregida del tema." };
   }
   if (tipo === "visual") {
-    return { ...toolBase, name: "guardar_formula_visual_corregida", description: "Guarda la fórmula visual corregida del tema." };
+    return { ...toolBase, name: "guardar_formulas_visual_corregidas", description: "Guarda las fórmulas visuales corregidas del tema." };
   }
   return { ...toolBase, name: "guardar_banco_preguntas_corregido", description: `Guarda el banco de preguntas de ${tipo} corregido para el tema.` };
 }
@@ -207,24 +220,33 @@ No agregues texto fuera del JSON.`,
 
   if (tipo === "visual") {
     return {
-      system: `Sos un asistente que elige una fórmula matemática representativa de un tema, para precargar
-el campo de un graficador interactivo (materia: "${materia}", tema: "${tema}"). La fórmula que elijas es
-solo el valor DEFAULT del campo -- el usuario después la puede editar y también elige si la ve como
-gráfico 2D o como superficie 3D con los mismos botones, así que no hace falta que decidas eso: alcanza
-con que sea una expresión razonable en x e y que ilustre bien una idea central del tema.
-Devolvé SOLO un JSON válido con esta forma: {"formula": "string"}.
+      system: `Sos un asistente que elige las fórmulas matemáticas que se van a graficar por defecto en un
+graficador interactivo (materia: "${materia}", tema: "${tema}"). Son solo los valores DEFAULT: el usuario
+después las puede editar, sumar o quitar, y elige si las ve como gráfico 2D o como superficie 3D con los
+mismos botones, así que no hace falta que decidas eso.
+Devolvé SOLO un JSON válido con esta forma: {"formulas": [{"formula": "string"}, ...]}.
 
-REGLA DURA sobre el contenido de "formula" (no es LaTeX, es una expresión que un parser simple tiene
+CUÁNTAS: elegí entre 1 y ${MAX_FORMULAS_VISUAL} fórmulas, según lo que el tema realmente necesite.
+- Si el tema se entiende con una sola curva o superficie, devolvé UNA. No agregues fórmulas de relleno.
+- Si el tema se entiende mejor comparando (ej: una función y su derivada, distintos casos de un parámetro,
+  una familia de curvas, función e inversa), devolvé las que hagan falta para esa comparación.
+- La primera es la principal. Las demás tienen que aportar algo distinto: nunca repitas una fórmula ni
+  devuelvas variantes triviales de la misma (ej: "sin(x)" y "1*sin(x)").
+- No mezcles fórmulas de 2D (solo x) con superficies 3D (x e y) en la misma lista salvo que el tema lo pida:
+  se grafican todas en el mismo modo, y una función solo de x se ve como una pared en 3D.
+
+REGLA DURA sobre el contenido de cada "formula" (no es LaTeX, es una expresión que un parser simple tiene
 que poder evaluar tal cual):
 - Solo podés usar: números, las variables x e y, las constantes pi y e, los operadores + - * / ^ ( ),
   y EXCLUSIVAMENTE estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.
 - Nada de LaTeX (sin \\frac, sin ^{}, sin subíndices), nada de comas, nada de otras funciones
-  (nunca pow/cosh/atan/log10/etc.), nada de variables que no sean x/y.
+  (nunca pow/cosh/atan/log10/etc.), nada de variables que no sean x/y, nada de "y =" ni "f(x) =".
 - Multiplicación implícita está permitida (ej. "2x" o "(x+1)y"), pero preferí "*" explícito salvo que
   sea un caso claro como coeficiente pegado a la variable.
-- Máximo 400 caracteres, y preferí algo simple y visualmente claro (ideal: menos de 60 caracteres).
+- Máximo 400 caracteres por fórmula, y preferí algo simple y visualmente claro (ideal: menos de 60).
 ${bloqueIdioma(idioma)}
-Ejemplos válidos: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "sqrt(abs(x*y))".
+Ejemplos válidos de una fórmula: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "sqrt(abs(x*y))".
+Ejemplo de tema comparativo: {"formulas": [{"formula": "x^2"}, {"formula": "2*x"}]}.
 No agregues texto fuera del JSON.`,
       prompt: `Materia: ${materia}\nTema: ${tema}`,
     };
@@ -287,13 +309,16 @@ Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuer
 
   if (tipo === "visual") {
     return {
-      system: `Revisá esta fórmula visual. Tiene que ser una expresión evaluable en x e y -- NO LaTeX -- que
-solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
-${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
-variable, una coma), reescribila para que quede dentro de esas reglas sin cambiar demasiado la idea
-matemática original.
+      system: `Revisá estas fórmulas visuales (una lista en "formulas"). Cada una tiene que ser una expresión evaluable
+en x e y -- NO LaTeX -- que solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE
+estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función,
+LaTeX, otra variable, una coma, "y =" al principio), reescribila para que quede dentro de esas reglas sin
+cambiar demasiado la idea matemática original.
+Reglas de la lista: conservá la MISMA cantidad de fórmulas y el MISMO orden (la primera es la principal);
+no agregues ni quites fórmulas salvo que haya dos repetidas o equivalentes triviales, en cuyo caso quitá la
+repetida; máximo ${MAX_FORMULAS_VISUAL}. Si algún item trae "color", dejalo tal cual.
 ${bloqueIdioma(idioma)}
-Devolvé el JSON corregido con la misma forma {"formula": "..."}. Sin texto fuera del JSON.`,
+Devolvé el JSON corregido con la forma {"formulas": [{"formula": "..."}, ...]}. Sin texto fuera del JSON.`,
       prompt: JSON.stringify(borrador),
     };
   }
@@ -350,13 +375,16 @@ Guardá la fórmula corregida con la herramienta.`,
 
   if (tipo === "visual") {
     return {
-      system: `Revisá esta fórmula visual. Tiene que ser una expresión evaluable en x e y -- NO LaTeX -- que
-solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
-${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
-variable, una coma), reescribila para que quede dentro de esas reglas sin cambiar demasiado la idea
-matemática original.
+      system: `Revisá estas fórmulas visuales (una lista en "formulas"). Cada una tiene que ser una expresión evaluable
+en x e y -- NO LaTeX -- que solo use: números, x, y, pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE
+estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función,
+LaTeX, otra variable, una coma, "y =" al principio), reescribila para que quede dentro de esas reglas sin
+cambiar demasiado la idea matemática original.
+Reglas de la lista: conservá la MISMA cantidad de fórmulas y el MISMO orden (la primera es la principal);
+no agregues ni quites fórmulas salvo que haya dos repetidas o equivalentes triviales, en cuyo caso quitá la
+repetida; máximo ${MAX_FORMULAS_VISUAL}. Si algún item trae "color", dejalo tal cual.
 ${bloqueIdioma(idioma)}
-Guardá la fórmula visual corregida con la herramienta.`,
+Guardá las fórmulas visuales corregidas con la herramienta.`,
       prompt: JSON.stringify(borrador),
     };
   }
