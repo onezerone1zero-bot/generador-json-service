@@ -1,0 +1,118 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper, margin=2cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{enumitem}
+\usepackage{array}
+
+\pagestyle{empty}
+
+% ---------- FIGURA (se usa en el ejercicio 3) ----------
+\newcommand{\figuraEj}{%
+\fbox{%
+\begin{tikzpicture}[scale=1]
+  \coordinate (A) at (0,0);
+  \coordinate (B) at (2.2,0);
+  \coordinate (C) at (0,3.2);
+  \draw[thick] (A) -- (B) -- (C) -- cycle;
+  % marca de angulo recto en A
+  \draw (0,0.3) -- (0.3,0.3) -- (0.3,0);
+  % etiquetas de lados
+  \node at (1.1,-0.35) {$b$};
+  \node at (-0.35,1.6) {$a$};
+  \node at (1.3,1.9) {$c$};
+  % margen interno del recuadro
+  \useasboundingbox (-0.4,-0.4) rectangle (2.6,3.6);
+\end{tikzpicture}%
+}%
+}
+
+\begin{document}
+
+% \shorthandoff{<>} es OBLIGATORIO acá (justo después de \begin{document},
+% no sirve en el preambulo): babel-spanish activa "<" y ">" como caracteres
+% activos para las comillas angulares («»), y \selectlanguage (que corre
+% automáticamente al entrar al documento) los reactiva pisando cualquier
+% \shorthandoff puesto antes en el preámbulo. Con "<" y ">" activos,
+% cualquier \draw[->], \draw[<-] o \draw[<->] de TikZ (p.ej. en la figura
+% insertada en %%FIGURA_AQUI%%) rompe la compilación con el error
+% "Argument of \language@active@arg> has an extra }." No sacar esta línea.
+\shorthandoff{<>}
+
+% ---- Layout de dos columnas con linea vertical (minipage + regla) ----
+% La minipage de la derecha tiene ALTURA FIJA (\textheight): esto es lo que
+% hace que la práctica ocupe la hoja completa sin importar cuántos ejercicios
+% tenga. El "plus 1fill" en itemsep es glue elástico: LaTeX reparte el
+% espacio sobrante entre todos los ejercicios en el momento de compilar, así
+% que no hace falta calcular nada a mano ni que la IA "sepa" dónde termina
+% la hoja. Esto es INTENCIONAL y OBLIGATORIO: no lo reemplaces por un
+% itemsep fijo sin "plus", y no le saques la altura fija a la minipage.
+\noindent
+\begin{minipage}[t]{3.3cm}
+\vspace{0pt}
+\centering
+\vspace{9cm}
+\figuraEj
+
+\vspace{0.4cm}
+{\footnotesize Fig. para ej. 3}
+\end{minipage}%
+\hspace{0.6cm}
+\begin{minipage}[t][0.97\textheight]{12.5cm}
+\vspace{0pt}
+\begin{center}
+{\Large \textbf{Trigonometría: Triángulos rectángulos}}\\[2pt]
+\rule{6cm}{0.5pt}
+\end{center}
+
+\vspace{0.5cm}
+
+\begin{enumerate}[leftmargin=1.2cm, itemsep=0.55cm plus 1fill]
+
+\item Un triángulo rectángulo tiene catetos de $5\,\text{cm}$ y $12\,\text{cm}$. Calculá la longitud de la hipotenusa.
+
+\item En un triángulo rectángulo, uno de los ángulos agudos mide $37^\circ$ y la hipotenusa mide $10\,\text{cm}$. Calculá la longitud del cateto opuesto a dicho ángulo.
+
+\item En el triángulo de la figura, $a = 8\,\text{cm}$ y $b = 6\,\text{cm}$. Calculá el valor de $c$ y el ángulo comprendido entre $b$ y $c$.
+
+\item Un poste vertical proyecta una sombra de $15\,\text{m}$ cuando el ángulo de elevación del sol es de $42^\circ$. Calculá la altura del poste.
+
+\item Calculá $\sin\theta$, $\cos\theta$ y $\tan\theta$ para un triángulo rectángulo cuyos catetos miden $9\,\text{cm}$ y $12\,\text{cm}$.
+
+\item Desde un punto ubicado a $20\,\text{m}$ de la base de un edificio, el ángulo de elevación hasta su parte superior es de $55^\circ$. Calculá la altura del edificio.
+
+\item Un triángulo rectángulo tiene un ángulo agudo de $28^\circ$ y el cateto adyacente mide $14\,\text{cm}$. Calculá la hipotenusa.
+
+\item Una escalera de $6\,\text{m}$ apoyada contra una pared forma un ángulo de $65^\circ$ con el piso. Calculá a qué altura de la pared llega la escalera.
+
+\item En un triángulo rectángulo, la hipotenusa mide $25\,\text{cm}$ y uno de los catetos mide $7\,\text{cm}$. Calculá el otro cateto y los dos ángulos agudos.
+
+\item Dos observadores están a $50\,\text{m}$ y $80\,\text{m}$ de la base de una torre, alineados con ella. Si el ángulo de elevación desde el punto más lejano es de $30^\circ$, calculá la altura de la torre y el ángulo de elevación desde el punto más cercano.
+
+\end{enumerate}
+\end{minipage}
+
+\newpage
+\begin{center}
+{\Large \textbf{Respuestas}}\\[2pt]
+\rule{6cm}{0.5pt}
+\end{center}
+
+\begin{enumerate}[leftmargin=1.2cm, itemsep=0.3cm]
+\item $13\,\text{cm}$
+\item $\approx 6{,}02\,\text{cm}$
+\item $c = 10\,\text{cm}$; ángulo $\approx 53{,}13^\circ$
+\item $\approx 13{,}51\,\text{m}$
+\item $\sin\theta = 0{,}6$; \ $\cos\theta = 0{,}8$; \ $\tan\theta = 0{,}75$
+\item $\approx 28{,}56\,\text{m}$
+\item $\approx 15{,}86\,\text{cm}$
+\item $\approx 5{,}44\,\text{m}$
+\item cateto $= 24\,\text{cm}$; ángulos $\approx 16{,}26^\circ$ y $73{,}74^\circ$
+\item altura $\approx 46{,}19\,\text{m}$; ángulo desde el punto cercano $\approx 42{,}72^\circ$
+\end{enumerate}
+
+\end{document}

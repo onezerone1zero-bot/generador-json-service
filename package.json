@@ -1,15 +1,11 @@
 {
-  "name": "generador-json-service",
+  "name": "generador-contenido-service",
   "version": "1.0.0",
-  "description": "Servicio que genera practice.json / exam.json / formulas.json por tema (Claude crea, Mistral corrige) y los guarda en Cloudflare KV.",
+  "private": true,
   "type": "module",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node src/server.js"
   },
   "dependencies": {
     "express": "^4.19.2"

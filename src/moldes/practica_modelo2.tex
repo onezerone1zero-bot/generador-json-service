@@ -1,0 +1,106 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper, margin=2cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{enumitem}
+
+\pagestyle{empty}
+
+% ---------- FIGURAS (dato extra, ayudan a visualizar) ----------
+\newcommand{\poligonoInscripto}[2]{%
+% #1 = numero de lados, #2 = etiqueta
+\begin{tikzpicture}[scale=1]
+  \def\R{1.4}
+  \draw[thick] (0,0) circle (\R);
+  \draw[thick] (90:\R) \foreach \i in {1,...,#1} { -- (90+\i*360/#1:\R) };
+  \node at (0,-1.9) {\footnotesize #2};
+\end{tikzpicture}%
+}
+
+\begin{document}
+
+% \shorthandoff{<>} es OBLIGATORIO acá (justo después de \begin{document},
+% no sirve en el preambulo): babel-spanish activa "<" y ">" como caracteres
+% activos para las comillas angulares («»), y \selectlanguage (que corre
+% automáticamente al entrar al documento) los reactiva pisando cualquier
+% \shorthandoff puesto antes en el preámbulo. Con "<" y ">" activos,
+% cualquier \draw[->], \draw[<-] o \draw[<->] de TikZ rompe la compilación
+% con el error "Argument of \language@active@arg> has an extra }."
+% No sacar esta línea.
+\shorthandoff{<>}
+
+% La minipage tiene ALTURA FIJA (\textheight): esto es lo que hace que la
+% práctica ocupe la hoja completa sin importar cuántos ejercicios tenga.
+% Los "plus 1fill" en itemsep y en el \vspace antes de "Figuras" son glue
+% elástico: LaTeX reparte el espacio sobrante entre esos puntos en el
+% momento de compilar. Esto es INTENCIONAL y OBLIGATORIO: no reemplaces el
+% itemsep ni el vspace por valores fijos sin "plus", y no le saques la
+% altura fija a la minipage.
+\begin{minipage}[t][\textheight]{\linewidth}
+\begin{center}
+{\Large \textbf{Geometría: Polígonos regulares inscriptos}}\\[2pt]
+\rule{7cm}{0.5pt}
+\end{center}
+
+\vspace{0.5cm}
+
+\begin{enumerate}[leftmargin=1.2cm, itemsep=0.5cm plus 1fill]
+
+\item Un triángulo equilátero está inscripto en una circunferencia de radio $6\,\text{cm}$. Calculá la longitud del lado del triángulo.
+
+\item Un hexágono regular está inscripto en una circunferencia de radio $8\,\text{cm}$. Calculá el perímetro del hexágono.
+
+\item Un pentágono regular está inscripto en una circunferencia de radio $5\,\text{cm}$. Calculá la longitud aproximada de uno de sus lados.
+
+\item Calculá la apotema de un hexágono regular inscripto en una circunferencia de radio $10\,\text{cm}$.
+
+\item Un triángulo equilátero inscripto en una circunferencia tiene lado $L = 9\,\text{cm}$. Calculá el radio de la circunferencia circunscripta.
+
+\item Calculá el área de un hexágono regular inscripto en una circunferencia de radio $6\,\text{cm}$.
+
+\item Un pentágono regular tiene lado $L = 7\,\text{cm}$. Calculá el radio de la circunferencia en la que está inscripto.
+
+\item Calculá el área de un pentágono regular inscripto en una circunferencia de radio $9\,\text{cm}$.
+
+\item Un octógono regular está inscripto en una circunferencia de radio $4\,\text{cm}$. Calculá la longitud de su lado.
+
+\item Comparando un triángulo, un pentágono y un hexágono inscriptos en una misma circunferencia de radio $r$, ¿cuál de los tres tiene mayor perímetro? Justificá sin hacer los cálculos numéricos.
+
+\end{enumerate}
+
+\vspace{0.8cm plus 1fill}
+
+\begin{center}
+{\large \textbf{Figuras}}\\[0.4cm]
+\begin{tikzpicture}
+  \node at (0,0)  {\poligonoInscripto{3}{Triángulo}};
+  \node at (4,0)  {\poligonoInscripto{5}{Pentágono}};
+  \node at (8,0)  {\poligonoInscripto{6}{Hexágono}};
+\end{tikzpicture}
+\end{center}
+\end{minipage}
+
+\newpage
+\begin{center}
+{\Large \textbf{Respuestas}}\\[2pt]
+\rule{6cm}{0.5pt}
+\end{center}
+
+\begin{enumerate}[leftmargin=1.2cm, itemsep=0.3cm]
+\item $L = 6\sqrt{3} \approx 10{,}39\,\text{cm}$
+\item Perímetro $= 48\,\text{cm}$ (lado $= 8\,\text{cm}$)
+\item $L \approx 5{,}88\,\text{cm}$
+\item Apotema $\approx 8{,}66\,\text{cm}$
+\item $R = 3\sqrt{3} \approx 5{,}20\,\text{cm}$
+\item Área $\approx 93{,}53\,\text{cm}^2$
+\item $R \approx 5{,}96\,\text{cm}$
+\item Área $\approx 173{,}21\,\text{cm}^2$
+\item $L \approx 3{,}06\,\text{cm}$
+\item El triángulo, ya que a mayor cantidad de lados el polígono se aproxima más a la circunferencia y cada lado es más corto; con menos lados, cada lado subtiende un arco mayor.
+\end{enumerate}
+
+\end{document}

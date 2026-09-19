@@ -1,0 +1,8 @@
+Moldes de referencia que usa ia3.js (vía leer()) para armar los .tex de cada tema nuevo.
+No son placeholders: ya tienen contenido real (ver ejemplos abajo). Si cambiás la estructura
+de alguno, revisá que ia3.js siga generando algo consistente con el molde actualizado.
+
+- teoria_pdf.tex / teoria_epub.tex: teoría (ejemplo actual: trigonometría, triángulo)
+- extra_pdf.tex: contenido extra, solo PDF (sin versión epub)
+- practica_modelo1.tex: práctica con figura obligatoria tipo 1 (ejemplo actual: triángulo)
+- practica_modelo2.tex: práctica con figura obligatoria tipo 2 (ejemplo actual: polígono inscripto)
