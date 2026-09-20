@@ -1,3 +1,5 @@
+import { FUNCIONES_PERMITIDAS } from "../lib/formulaSegura.js";
+
 // ASUNCIÓN A CONFIRMAR: no tenemos el contenido real de practice.js/exam.js
 // del frontend en este chat, así que este es el schema de "pregunta" que
 // asumimos (multiple choice con 4 opciones). Si el frontend espera otra
@@ -25,12 +27,32 @@ const INSTRUCCIONES_POR_TIPO = {
 // tool_choice forzado garantiza la FORMA del JSON ({"formula": "..."}),
 // no que el contenido de "formula" respete esta gramática -- eso lo
 // sigue validando validarVisual() después.
-// ACTUALIZADO: esta lista estaba desincronizada de la real -- le faltaban
-// asin/acos/atan/cbrt/log2/ln, que visual.js ya soporta hace rato. Tiene
-// que coincidir EXACTAMENTE con FUNCIONES_PERMITIDAS de lib/formulaSegura.js
-// (que a su vez espeja FUNCIONES_PERMITIDAS_FORMULA de visual.js).
-const FUNCIONES_PERMITIDAS_VISUAL = "sin, cos, tan, asin, acos, atan, sqrt, cbrt, abs, exp, log, log2, ln";
+// SINCRONIZADO: se importa la lista directo de FUNCIONES_PERMITIDAS de
+// lib/formulaSegura.js (que a su vez espeja FUNCIONES_PERMITIDAS_FORMULA
+// de visual.js) en vez de tener una tercera copia hardcodeada acá --
+// ya pasó dos veces que esta copia quedó vieja (primero le faltaban
+// asin/acos/atan/cbrt/log2/ln, después cot/sec/csc/sinh/cosh/tanh/
+// asinh/acosh/atanh/log10/floor/ceil/round/sign) y aprobaba en el schema
+// funciones que formulaSegura.js iba a rechazar después. Importando de
+// una sola fuente, ya no se puede desincronizar entre estas dos.
+const FUNCIONES_PERMITIDAS_VISUAL = FUNCIONES_PERMITIDAS.join(", ");
 const MAX_FORMULAS_VISUAL = 6; // tiene que coincidir con MAX_FORMULAS_VISUAL de lib/validarEstructura.js
+
+// Texto del prompt para el parámetro animable de visual.js: cualquier
+// letra suelta (una sola letra, que no sea x/y/z/u/v/e/pi ni una de las
+// funciones de arriba) que aparezca en la fórmula arma su propio slider
+// animable en el frontend (arranca en 1, rango [-5,5]) -- ver
+// detectarLetrasParametroGlobal en visual.js y la nota de "PARÁMETRO
+// ANIMABLE" en formulaSegura.js. Antes esto estaba prohibido a propósito
+// acá (una letra suelta se rechazaba como nombre no permitido); ya se
+// habilitó en formulaSegura.js, así que el prompt tiene que decirle a la
+// IA que existe y cómo usarlo sin romper la fórmula al valor inicial.
+const BLOQUE_PARAMETRO_ANIMABLE = `Opcionalmente podés usar UNA letra suelta (ej. "a") como parámetro animable -- el
+frontend le arma un slider propio automáticamente. Arranca en valor 1, así que la fórmula tiene que verse
+bien (no quedar constante, indefinida o sin solución real) también con esa letra en 1. No la uses como la
+única fuente de escala de una implícita (ej. "x^2+y^2=a" da un círculo de radio 1, válido pero chico) sin
+sumarle algo -- preferí algo como "x^2+y^2=(3+a)^2". Usá como máximo una, y solo cuando de verdad aporte
+(una familia de curvas con un parámetro variable), no en cada fórmula.`;
 
 // Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
 // 3 modelos free de 12 preguntas cada uno para el examen (antes 10) --
@@ -258,8 +280,9 @@ que poder evaluar tal cual), aplica a las tres partes de cualquiera de los forma
   implícita; u/v en paramétrica), las constantes pi y e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE
   estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.
 - Nada de LaTeX (sin \\frac, sin ^{}, sin subíndices), nada de comas, nada de otras funciones
-  (nunca pow/cosh/log10/etc.), nada de variables sueltas fuera de esa lista, nada de "y =" antepuesto a
-  una explícita (para eso está el formato implícita) ni "f(x) =".
+  (nunca pow/atan2/mod/etc. -- fuera de la lista de arriba no existen), nada de variables sueltas fuera
+  de esa lista y del parámetro animable opcional (ver abajo), nada de "y =" antepuesto a una explícita
+  (para eso está el formato implícita) ni "f(x) =".
 - Multiplicación implícita está permitida (ej. "2x" o "(x+1)y"), pero preferí "*" explícito salvo que
   sea un caso claro como coeficiente pegado a la variable.
 - Máximo 400 caracteres para explícita/implícita; hasta 800 en total (con los saltos de línea incluidos)
@@ -269,6 +292,7 @@ que poder evaluar tal cual), aplica a las tres partes de cualquiera de los forma
   dispare a valores absurdos ahí (ej. "exp(x)" ya da ~22000 en x=10), y si es implícita, que realmente
   tenga solución real en ese rango (que cambie de signo en algún punto, no que un lado del "=" domine
   siempre al otro).
+- ${BLOQUE_PARAMETRO_ANIMABLE}
 ${bloqueIdioma(idioma)}
 Ejemplos válidos: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "x^2+y^2=25".
 Ejemplo de tema comparativo: {"formulas": [{"formula": "x^2"}, {"formula": "2*x"}]}.
@@ -342,11 +366,13 @@ formatos -- NO LaTeX:
 - Paramétrica: tres líneas "x=...", "y=...", "z=..." dentro del mismo string, cada una en función de u y/o v.
 En cualquiera de los tres, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
 en implícita; u/v en paramétrica), pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
-${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
-variable, una coma, "y =" antepuesto a una explícita, "f(x) ="), reescribila para que quede dentro de estas
-reglas sin cambiar demasiado la idea matemática original -- si la idea es un círculo o superficie que solo
-se puede expresar de forma implícita o paramétrica, NO la fuerces a explícita aunque eso implique perder
-la mitad de la curva.
+${FUNCIONES_PERMITIDAS_VISUAL}. Excepción: UNA sola letra suelta (que no sea de esa lista) es válida como
+parámetro animable -- ver el párrafo de abajo -- no la reescribas como si fuera "otra variable" inválida.
+Si encontrás algo fuera de esa gramática (otra función, LaTeX, dos o más letras sueltas distintas, una coma,
+"y =" antepuesto a una explícita, "f(x) ="), reescribila para que quede dentro de estas reglas sin cambiar
+demasiado la idea matemática original -- si la idea es un círculo o superficie que solo se puede expresar de
+forma implícita o paramétrica, NO la fuerces a explícita aunque eso implique perder la mitad de la curva.
+${BLOQUE_PARAMETRO_ANIMABLE}
 También corregí, sin cambiar el formato elegido, si la fórmula da una pantalla vacía o inútil: constante,
 indefinida en casi todo el rango x,y∈[-10,10] (o u∈[0,2π], v∈[-1,1] en paramétrica), que se dispara a
 valores absurdos ahí, o que -siendo implícita- no tiene solución real en ese rango (no cambia de signo).
@@ -419,11 +445,13 @@ formatos -- NO LaTeX:
 - Paramétrica: tres líneas "x=...", "y=...", "z=..." dentro del mismo string, cada una en función de u y/o v.
 En cualquiera de los tres, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
 en implícita; u/v en paramétrica), pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
-${FUNCIONES_PERMITIDAS_VISUAL}. Si encontrás algo fuera de esa gramática (otra función, LaTeX, otra
-variable, una coma, "y =" antepuesto a una explícita, "f(x) ="), reescribila para que quede dentro de estas
-reglas sin cambiar demasiado la idea matemática original -- si la idea es un círculo o superficie que solo
-se puede expresar de forma implícita o paramétrica, NO la fuerces a explícita aunque eso implique perder
-la mitad de la curva.
+${FUNCIONES_PERMITIDAS_VISUAL}. Excepción: UNA sola letra suelta (que no sea de esa lista) es válida como
+parámetro animable -- ver el párrafo de abajo -- no la reescribas como si fuera "otra variable" inválida.
+Si encontrás algo fuera de esa gramática (otra función, LaTeX, dos o más letras sueltas distintas, una coma,
+"y =" antepuesto a una explícita, "f(x) ="), reescribila para que quede dentro de estas reglas sin cambiar
+demasiado la idea matemática original -- si la idea es un círculo o superficie que solo se puede expresar de
+forma implícita o paramétrica, NO la fuerces a explícita aunque eso implique perder la mitad de la curva.
+${BLOQUE_PARAMETRO_ANIMABLE}
 También corregí, sin cambiar el formato elegido, si la fórmula da una pantalla vacía o inútil: constante,
 indefinida en casi todo el rango x,y∈[-10,10] (o u∈[0,2π], v∈[-1,1] en paramétrica), que se dispara a
 valores absurdos ahí, o que -siendo implícita- no tiene solución real en ese rango (no cambia de signo).

@@ -10,10 +10,38 @@ const casos = [
   ["log(x-100)", false],      // indefinida en casi todo el rango
   ["sqrt(25-x^2-y^2)", false],// medio domo -- indefinida en más de la mitad del rango ±10
 
-  // Nuevas funciones sincronizadas
+  // Nuevas funciones sincronizadas (primera pasada: asin/acos/atan/cbrt/log2/ln)
   ["asin(x/20)", true],
   ["cbrt(x)+cbrt(y)", true],
   ["ln(abs(x)+1)-ln(abs(y)+1)", true],
+
+  // Nuevas funciones sincronizadas (segunda pasada: cot/sec/csc/sinh/cosh/
+  // tanh/asinh/acosh/atanh/log10/floor/ceil/round/sign) -- las 14 que le
+  // faltaban a formulaSegura.js respecto de FUNCIONES_PERMITIDAS_FORMULA
+  // de visual.js.
+  ["cosh(x/10)-cosh(y/10)", true],
+  ["sinh(x/10)+cosh(y/10)", true],
+  ["tanh(x)-tanh(y)", true],
+  ["asinh(x/5)+acosh(abs(y/5)+1)", true],
+  ["atanh(x/20)", true],            // x/20 ∈ [-0.5,0.5] con x∈±10 -- adentro del dominio (-1,1) en toda la grilla
+  ["log10(abs(x)+1)-log10(abs(y)+1)", true], // regresión del bug de tokenizer (dígitos en el nombre de función)
+  ["log2(abs(x)+1)-log2(abs(y)+1)", true],   // idem, caso ya cubierto antes pero se repite junto a log10
+  ["cot(x/10)+0*y", true],          // x/10 ∈ ±1, la grilla de muestreo no cae justo en un múltiplo de π
+  ["sec(x/10)*0.1+0*y", true],
+  ["csc(x/10)*0.1+0*y", true],
+  ["floor(x/3)-floor(y/3)", true],
+  ["ceil(x/3)-ceil(y/3)", true],
+  ["round(x)-round(y)", true],
+  ["sign(x)-sign(y)", true],        // toma {-1,0,1} en cada eje -- con las grillas de muestreo (x sin 0, y con 0) sí varía
+
+  // Parámetro animable (letra suelta, valor fijo en 1 para esta validación
+  // -- mismo default que arranca el slider en visual.js)
+  ["a*x^2+0*y", true],              // familia de parábolas y=a*x^2, con a=1 da x^2 -- válida
+  ["x^2+y^2=(3+a)^2", true],        // círculo de radio ajustable, con a=1 da radio 4
+  ["b*sin(x)*cos(y)", true],
+  ["ab*x", false],                  // "ab" son DOS letras pegadas -- no es un parámetro animable válido (visual.js solo reconoce nombres de UNA letra), es un nombre no permitido
+  ["a*x+b*y+c", true],              // varias letras sueltas a la vez están permitidas (visual.js les arma un slider a cada una) y esta sí depende de x/y
+  ["a+b+c+0*x+0*y", false],         // caso trampa: aunque usa 3 parámetros válidos, con todos fijos en 1 (a=b=c=1) da constante 3 en todo punto -- el chequeo de "se ve bien" lo rechaza igual que rechazaría "0*x+5"
 
   // Implícitas
   ["x^2+y^2=25", true],           // círculo completo
