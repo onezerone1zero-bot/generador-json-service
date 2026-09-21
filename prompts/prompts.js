@@ -174,7 +174,13 @@ export function armarToolClaude(tipo) {
             required: ["tema", "motivo", "herramienta_sugerida"],
           },
         },
-        anyOf: [{ required: ["formulas"] }, { required: ["necesitaHerramienta"] }],
+        // SIN anyOf/oneOf/allOf en la raíz: la API de Anthropic rechaza el
+        // input_schema con 400 ("input_schema does not support oneOf,
+        // allOf, or anyOf at the top level"), lo que hacía fallar TODOS los
+        // intentos de "visual". La regla "formulas O necesitaHerramienta"
+        // (uno u otro, al menos uno) ya la hace cumplir validarVisual en
+        // lib/validarEstructura.js del lado del servidor, y el description
+        // de cada campo se lo dice al modelo.
       },
     };
   }
