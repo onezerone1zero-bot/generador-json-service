@@ -75,3 +75,20 @@ console.log(JSON.stringify(validarVisual({ formulas: [{ formula: "x^2" }, { form
 console.log("\n--- tool schema (visual) incluye los 3 formatos en la descripción ---");
 const tool = armarToolClaude("visual");
 console.log(tool.input_schema.properties.formulas.items.properties.formula.description.slice(0, 160) + "...");
+
+console.log("\n--- necesitaHerramienta (camino \"no cobertura\") ---");
+const casosNecesitaHerramienta = [
+  [{ necesitaHerramienta: { tema: "superficie fractal tipo Mandelbulb", motivo: "no hay comando de fractales 3D en visual.js ni en los 3 formatos de fórmula", herramienta_sugerida: "función nueva en visual.js, o precálculo aparte en Rust/C++ por rendimiento" } }, true],
+  [{ necesitaHerramienta: { tema: "corto", motivo: "no alcanza", herramienta_sugerida: "algo" } }, false], // campos < 10 caracteres
+  [{ necesitaHerramienta: { tema: "válido y largo de sobra para pasar el mínimo", motivo: "válido y largo de sobra para pasar el mínimo" } }, false], // falta herramienta_sugerida
+  [{ formulas: [{ formula: "x^2" }], necesitaHerramienta: { tema: "no debería mandarse junto con formulas, pero si igual llega, se valida solo esto", motivo: "válido y largo de sobra para pasar el mínimo", herramienta_sugerida: "válido y largo de sobra para pasar el mínimo" } }, true], // necesitaHerramienta pisa a "formulas" (ver validarVisual)
+];
+for (const [data, esperadoOk] of casosNecesitaHerramienta) {
+  const resultado = validarVisual(data);
+  const marca = resultado.ok === esperadoOk ? "OK " : "FAIL";
+  console.log(`${marca} esperado=${esperadoOk} real=${resultado.ok}`);
+  if (!resultado.ok) console.log("      →", resultado.errores[0]);
+}
+
+console.log("\n--- tool schema (visual) exige formulas O necesitaHerramienta (anyOf) ---");
+console.log(JSON.stringify(tool.input_schema.anyOf));

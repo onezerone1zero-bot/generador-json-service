@@ -35,6 +35,7 @@ arranque si falta alguna).
 | `CLOUDFLARE_ACCOUNT_ID` | Cuenta de Cloudflare |
 | `CLOUDFLARE_NAMESPACE_ID_PRACTICE` | Namespace ID de KV `practice_JSON` |
 | `CLOUDFLARE_API_TOKEN` | Token con permiso `Account > Workers KV Storage > Edit` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Requeridas por `lib/validarEnv.js` (registro de tamaño en `kv_entradas`) |
 
 ## Endpoint
 
@@ -51,8 +52,25 @@ Body:
 }
 ```
 
-`tipos` es opcional, subset de `["practice", "exam", "formula"]`.
-Default: `["practice", "exam"]`.
+`tipos` es opcional, subset de `["practice", "exam", "formula", "visual"]`.
+**Default (sin `tipos`): `["formula"]`** -- un solo KV por llamado. Es lo
+que dispara `generador-service-main`. Si se manda `tipos` explícito, se
+respeta tal cual.
+
+#### Un endpoint por tipo (sin cadena)
+
+Para generar un solo KV sin depender del default, cada tipo tiene su
+propio endpoint (mismo auth, mismo body salvo que no lleva `tipos`):
+
+| Endpoint | Genera |
+|---|---|
+| `POST /generar-json/practice` | solo `practice` |
+| `POST /generar-json/exam` | solo `exam` |
+| `POST /generar-json/formula` | solo `formula` |
+| `POST /generar-json/visual` | solo `visual` |
+
+Así `practice` y `exam` ya no salen en cadena con la fórmula: se piden
+cada uno con su propio llamado.
 
 Respuesta (200):
 ```json

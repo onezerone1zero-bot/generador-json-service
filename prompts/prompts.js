@@ -38,6 +38,51 @@ const INSTRUCCIONES_POR_TIPO = {
 const FUNCIONES_PERMITIDAS_VISUAL = FUNCIONES_PERMITIDAS.join(", ");
 const MAX_FORMULAS_VISUAL = 6; // tiene que coincidir con MAX_FORMULAS_VISUAL de lib/validarEstructura.js
 
+// Catálogo de TODO lo que visual.js (frontend) ya sabe graficar, más allá
+// de las 3 fórmulas simples de arriba (explícita/implícita/paramétrica).
+// Este generador, hoy, SOLO sabe EMITIR esas 3 -- no arma ninguno de estos
+// comandos aunque el frontend ya los soporte. Este bloque existe para que
+// la IA, al elegir qué graficar por defecto para un tema, tenga el mapa
+// REAL de lo que existe en visual.js y pueda distinguir dos casos bien
+// distintos antes de recurrir a "necesitaHerramienta" (ver más abajo y
+// armarToolClaude("visual")):
+//   (a) el tema se resolvería con uno de estos comandos (que visual.js YA
+//       tiene), pero este generador todavía no sabe emitirlo -- brecha de
+//       ESTE service, no de visual.js;
+//   (b) ni con esto alcanza -- haría falta una función nueva en visual.js,
+//       o una herramienta aparte (ej. algo pesado de precalcular, mejor en
+//       Rust/C++ que en el parser de fórmulas del canvas).
+// Mantener sincronizado a mano con la lista real de visual.js (no hay un
+// export compartido para esto, a diferencia de FUNCIONES_PERMITIDAS_VISUAL
+// arriba, que sí se importa de formulaSegura.js).
+const CAPACIDADES_VISUAL_JS_COMPLETAS = `
+Funciones (modo real, variable x; en modo complejo, z): ${FUNCIONES_PERMITIDAS_VISUAL}.
+Funciones solo en modo complejo, sobre z: re(z), im(z), conj(z), arg(z).
+Constantes: pi, e, i (i solo en modo complejo).
+
+Comandos 2D que visual.js YA soporta (además de fórmulas explícita/implícita):
+- Circle(radius)
+- r = f(theta) -> curva polar
+- a(n) = f(n) -> sucesión
+- dy/dx = f(x, y) -> campo de pendientes
+- f(x,y) <, >, <=, >= g(x,y) -> región sombreada por desigualdad
+- tangent(f(x), x0) -> recta tangente en x0 (acepta constantes: pi, 2*pi, sqrt(2), etc.)
+- derivative(f(x)) -> grafica f'(x) como curva completa (derivada numérica)
+- area(f(x), a, b) -> área bajo la curva entre a y b (a, b aceptan constantes)
+- riemann(f(x), a, b, n, type) -> rectángulos de Riemann; type: left, right o midpoint
+- taylor(f(x), a, n) -> f y su polinomio de Taylor de grado n en x=a
+- field(P(x,y), Q(x,y)) -> campo vectorial (dx,dy)=(P,Q)
+- matrix(a, b, c, d) -> transformación lineal [[a,b],[c,d]] aplicada a la grilla
+
+Comandos 3D que visual.js YA soporta:
+- Sphere(radius)
+- Surface((x(u,v), y(u,v), z(u,v)), u, umin, umax, v, vmin, vmax)
+
+Comportamientos automáticos (no son comandos, pasan solos con curvas explícitas):
+intersecciones entre curvas visibles, raíces/corte con eje y/extremos/asíntotas verticales,
+y cualquier letra suelta arma su propio slider de parámetro animable.
+`.trim();
+
 // Texto del prompt para el parámetro animable de visual.js: cualquier
 // letra suelta (una sola letra, que no sea x/y/z/u/v/e/pi ni una de las
 // funciones de arriba) que aparezca en la fórmula arma su propio slider
@@ -89,7 +134,7 @@ export function armarToolClaude(tipo) {
   if (tipo === "visual") {
     return {
       name: "guardar_formulas_visual",
-      description: "Guarda las fórmulas que se grafican por defecto en el graficador interactivo del tema.",
+      description: "Guarda las fórmulas que se grafican por defecto en el graficador interactivo del tema. Si ninguna fórmula (ni ningún comando que ya tenga visual.js) representa bien el tema, usa \"necesitaHerramienta\" en vez de \"formulas\".",
       input_schema: {
         type: "object",
         properties: {
@@ -109,8 +154,27 @@ export function armarToolClaude(tipo) {
               required: ["formula"],
             },
           },
+          necesitaHerramienta: {
+            type: "object",
+            description: "Alternativa a \"formulas\" -- usar SOLO cuando ni los 3 formatos de fórmula ni ninguno de los comandos que ya tiene visual.js (ver el catálogo completo en el system prompt) alcanzan para mostrar bien este tema. No mandar junto con \"formulas\": es uno u otro.",
+            properties: {
+              tema: {
+                type: "string",
+                description: "Qué se quería graficar/mostrar para este tema (1-2 frases concretas, no genéricas).",
+              },
+              motivo: {
+                type: "string",
+                description: "Por qué ni los 3 formatos de fórmula ni ninguno de los comandos que ya tiene visual.js (ver catálogo en el system prompt) alcanzan para esto.",
+              },
+              herramienta_sugerida: {
+                type: "string",
+                description: "Qué haría falta para cubrirlo: un comando/función nueva en visual.js, o una herramienta externa aparte (y para qué, ej. precálculo pesado mejor en Rust/C++).",
+              },
+            },
+            required: ["tema", "motivo", "herramienta_sugerida"],
+          },
         },
-        required: ["formulas"],
+        anyOf: [{ required: ["formulas"] }, { required: ["necesitaHerramienta"] }],
       },
     };
   }
@@ -296,6 +360,18 @@ que poder evaluar tal cual), aplica a las tres partes de cualquiera de los forma
 ${bloqueIdioma(idioma)}
 Ejemplos válidos: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "x^2+y^2=25".
 Ejemplo de tema comparativo: {"formulas": [{"formula": "x^2"}, {"formula": "2*x"}]}.
+
+SI NINGUNA FÓRMULA REPRESENTA BIEN EL TEMA: antes de forzar algo que no queda bien, tené en cuenta que
+visual.js (el frontend) ya soporta bastante más que estas 3 fórmulas -- este catálogo completo:
+${CAPACIDADES_VISUAL_JS_COMPLETAS}
+Importante: VOS solo podés emitir "formulas" en los 3 formatos de arriba -- no podés emitir ninguno de estos
+otros comandos (Circle, tangent, area, riemann, taylor, field, matrix, Surface, etc.), aunque el frontend ya
+los tenga. Si el tema se resolvería con uno de ESOS comandos, o si ni con todo este catálogo alcanza (haría
+falta una función nueva en visual.js o una herramienta externa aparte), NO inventes una fórmula forzada que
+no muestre bien el tema: llamá a la herramienta con "necesitaHerramienta" en vez de "formulas", explicando
+qué se quería graficar, por qué no alcanza lo disponible, y qué haría falta. Usalo solo cuando de verdad
+haga falta -- la gran mayoría de los temas SÍ se resuelven bien con una fórmula explícita/implícita/
+paramétrica normal, esto no es un atajo para evitar pensar la fórmula.
 No agregues texto fuera del JSON.`,
       prompt: `Materia: ${materia}\nTema: ${tema}`,
     };

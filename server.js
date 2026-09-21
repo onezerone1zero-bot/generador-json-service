@@ -22,63 +22,88 @@ function chequearAuth(req, res) {
   return true;
 }
 
-/**
- * POST /generar-json
- * Body: { materia, tema, tipos?, temaCanonico?, idioma? }
- *   tipos (opcional): subset de ["practice", "exam", "formula", "visual"].
- *   Default: ["practice", "exam", "formula"] -- "visual" (fórmula default
- *   del graficador interactivo) no entra en el default, solo se genera
- *   si se pide explícitamente.
- *   temaCanonico (opcional): título del tema en el índice canónico
- *     (español), si el llamador ya lo resolvió contra ese índice. Ver
- *     nota en lib/generar.js (generarYGuardarJSON) -- sin esto, la key
- *     de KV se arma con slugify(tema) tal cual (comportamiento previo).
- *   idioma (opcional, default "es"): idioma destino del contenido. Esta
- *     instancia ya no tiene un idioma fijo propio (antes salía de
- *     process.env.IDIOMA) -- lo manda generador-service-main en cada
- *     request, con el mismo idioma con el que generó la teoría.
- *
- * Llamado por generador-service-main después de generar el contenido
- * teórico de un tema (mismo tema, mismo slug, mismo idioma). Para cada
- * tipo pedido corre Claude/Fable (crea) + un corrector -- Mistral para
- * practice/formula, Fable con Mistral de fallback para exam, ver
- * lib/generar.js -- y guarda cada resultado en KV (namespaces
- * separados por tipo, keys "practice:<slug>" / "exam:<slug>" /
- * "formulas:<slug>", con sufijo "_<idioma>" si el idioma pedido no es
- * español -- ver lib/kv.js).
- *
- * Es síncrono (como /generar en el otro service): espera el resultado y
- * lo devuelve en la misma response. Si en el futuro esto tarda demasiado
- * (varios tipos x 2 llamadas de IA c/u), se puede pasar a un patrón de
- * cola + callback como /crear-tema-callback del otro service -- por ahora,
- * con 2-3 tipos, un request síncrono alcanza.
- */
-app.post("/generar-json", async (req, res) => {
-  if (!chequearAuth(req, res)) return;
+const TIPOS_VALIDOS = ["practice", "exam", "formula", "visual"];
 
-  const { materia, tema, tipos, temaCanonico, idioma } = req.body || {};
+// Lo que genera POST /generar-json cuando NO se manda `tipos`. Es lo que
+// dispara generador-service-main después de la teoría: solo la fórmula.
+// practice / exam / visual se piden por separado (ver más abajo) para que
+// un llamado no arrastre a los demás en cadena.
+const TIPOS_DEFAULT = ["formula"];
+
+/**
+ * Corre el pipeline para una lista de tipos y responde. Compartido por
+ * POST /generar-json y por los endpoints de un solo tipo.
+ */
+async function responderGeneracion(req, res, tiposPedidos) {
+  const { materia, tema, temaCanonico, idioma } = req.body || {};
   if (!materia || !tema) {
     return res.status(400).json({ error: "Faltan materia o tema" });
   }
 
-  const tiposValidos = ["practice", "exam", "formula", "visual"];
-  const tiposPedidos = Array.isArray(tipos) && tipos.length > 0 ? tipos : ["practice", "exam", "formula"];
-  const tiposInvalidos = tiposPedidos.filter((t) => !tiposValidos.includes(t));
-  if (tiposInvalidos.length > 0) {
-    return res.status(400).json({ error: `tipos inválidos: ${tiposInvalidos.join(", ")}. Válidos: ${tiposValidos.join(", ")}` });
-  }
-
   try {
-    const resultado = await generarYGuardarJSON({ materia, tema, tipos: tiposPedidos, temaCanonico, idioma: (idioma || "es").trim() });
-    // Si algún tipo falló pero otros salieron bien, devolvemos 207-like
-    // (200 con ok:false y detalle) en vez de 500 -- así generador-service-main
-    // puede decidir qué hacer con el resultado parcial en vez de perderlo todo.
+    const resultado = await generarYGuardarJSON({
+      materia,
+      tema,
+      tipos: tiposPedidos,
+      temaCanonico,
+      idioma: (idioma || "es").trim(),
+    });
+    // Si algún tipo falló pero otros salieron bien, devolvemos 200 con
+    // ok:false y detalle en vez de 500 -- así el llamador puede decidir
+    // qué hacer con el resultado parcial en vez de perderlo todo.
     res.json(resultado);
   } catch (err) {
     console.error("[generar-json] error:", err);
     res.status(500).json({ error: err.message });
   }
+}
+
+/**
+ * POST /generar-json
+ * Body: { materia, tema, tipos?, temaCanonico?, idioma? }
+ *   tipos (opcional): subset de ["practice", "exam", "formula", "visual"].
+ *   Default (si no se manda `tipos`): ["formula"] -- un solo KV por
+ *   llamado. Este es el camino que usa generador-service-main.
+ *   Si se manda `tipos` explícito, se respeta tal cual (ej. ["practice"]),
+ *   así que el contrato con el otro generador no cambia.
+ *   temaCanonico (opcional): título del tema en el índice canónico
+ *     (español), si el llamador ya lo resolvió contra ese índice. Ver
+ *     nota en lib/generar.js (generarYGuardarJSON).
+ *   idioma (opcional, default "es"): idioma destino del contenido. Lo
+ *     manda generador-service-main en cada request.
+ *
+ * Es síncrono: espera el resultado y lo devuelve en la misma response.
+ */
+app.post("/generar-json", async (req, res) => {
+  if (!chequearAuth(req, res)) return;
+
+  const { tipos } = req.body || {};
+  const tiposPedidos = Array.isArray(tipos) && tipos.length > 0 ? tipos : TIPOS_DEFAULT;
+
+  const tiposInvalidos = tiposPedidos.filter((t) => !TIPOS_VALIDOS.includes(t));
+  if (tiposInvalidos.length > 0) {
+    return res.status(400).json({ error: `tipos inválidos: ${tiposInvalidos.join(", ")}. Válidos: ${TIPOS_VALIDOS.join(", ")}` });
+  }
+
+  await responderGeneracion(req, res, tiposPedidos);
 });
+
+/**
+ * Endpoints separados, uno por tipo: cada uno genera SOLO su KV.
+ *   POST /generar-json/practice
+ *   POST /generar-json/exam
+ *   POST /generar-json/formula
+ *   POST /generar-json/visual
+ * Body: { materia, tema, temaCanonico?, idioma? } (sin `tipos`, no aplica).
+ * Así practice y exam ya no salen en cadena con la fórmula: se disparan
+ * cuando quieras, cada uno con su propio llamado.
+ */
+for (const tipo of TIPOS_VALIDOS) {
+  app.post(`/generar-json/${tipo}`, async (req, res) => {
+    if (!chequearAuth(req, res)) return;
+    await responderGeneracion(req, res, [tipo]);
+  });
+}
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
