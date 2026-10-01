@@ -57,6 +57,20 @@ const casos = [
   ["x=u\ny=u\nz=u", false],        // degenerada: depende solo de u
   ["x=v\ny=v\nz=v", false],        // degenerada: depende solo de v
 
+  // Comando euler(ángulo) -- fórmula de Euler en el plano complejo (solo 2D)
+  ["euler(pi)", true],             // la identidad e^(i*pi)+1=0: ángulo constante, válido
+  ["euler(t)", true],              // ángulo animable con una letra suelta (arranca en 1)
+  ["euler(2*pi/3)", true],
+  ["EULER( t + pi/4 )", true],     // mayúsculas y espacios
+  ["euler(x)", false],             // x vale 0 en visual.js: el ángulo saldría siempre 0
+  ["euler(u)", false],
+  ["euler()", false],              // sin ángulo
+  ["euler(t", false],              // paréntesis sin cerrar
+  ["euler(t)+1", false],           // el comando va solo, no se le suma nada
+  ["euler(pow(t,2))", false],      // función fuera de la gramática
+  ["euler(1/0)", false],           // no da un número finito
+  ["euler(1000)", false],          // ángulo absurdo (arco de cientos de vueltas)
+
   // Errores de gramática que deben seguir rechazándose
   ["pow(x,2)", false],
   ["y = sin(x)", true],            // "y =" antepuesto: el prompt le pide a la IA que NO lo escriba así, pero es válido como implícita (y-sin(x)=0 es la curva y=sin(x)), el validador no lo rechaza -- es guía de estilo para la IA, no una regla de gramática
@@ -72,7 +86,23 @@ for (const [formula, esperadoOk] of casos) {
 console.log("\n--- lista completa (6 max, comparativo) ---");
 console.log(JSON.stringify(validarVisual({ formulas: [{ formula: "x^2" }, { formula: "2*x" }] }), null, 2));
 
-console.log("\n--- tool schema (visual) incluye los 3 formatos en la descripción ---");
+console.log("\n--- euler dentro de una lista: reglas de mezcla ---");
+const casosListaEuler = [
+  [[{ formula: "euler(t)" }], true],
+  [[{ formula: "euler(t)" }, { formula: "sin(x)" }], true],                        // con una curva 2D: válido
+  [[{ formula: "euler(t)" }, { formula: "euler(pi)" }], false],                    // dos euler
+  [[{ formula: "euler(t)" }, { formula: "x=u\ny=v\nz=u+v" }], false],              // con una paramétrica (3D)
+  [[{ formula: "euler(t)" }, { formula: "x^2+y^2+z^2=25" }], false],               // con una implícita en z (3D)
+  [[{ formula: "euler(t)" }, { formula: "x^2+y^2=25" }], true],                    // con una implícita 2D: válido
+];
+for (const [lista, esperadoOk] of casosListaEuler) {
+  const resultado = validarVisual({ formulas: lista });
+  const marca = resultado.ok === esperadoOk ? "OK " : "FAIL";
+  console.log(`${marca} esperado=${esperadoOk} real=${resultado.ok}  ${JSON.stringify(lista.map((i) => i.formula))}`);
+  if (!resultado.ok) console.log("      →", resultado.errores[0]);
+}
+
+console.log("\n--- tool schema (visual) incluye los 4 formatos en la descripción ---");
 const tool = armarToolClaude("visual");
 console.log(tool.input_schema.properties.formulas.items.properties.formula.description.slice(0, 160) + "...");
 
