@@ -40,8 +40,9 @@ const MAX_FORMULAS_VISUAL = 6; // tiene que coincidir con MAX_FORMULAS_VISUAL de
 
 // Catálogo de TODO lo que visual.js (frontend) ya sabe graficar, más allá
 // de las 3 fórmulas simples de arriba (explícita/implícita/paramétrica).
-// Este generador, hoy, SOLO sabe EMITIR esas 3 -- no arma ninguno de estos
-// comandos aunque el frontend ya los soporte. Este bloque existe para que
+// Este generador, hoy, SOLO sabe EMITIR esas 3 más el comando euler(...)
+// (formato 4) -- no arma ninguno de los otros comandos aunque el frontend
+// ya los soporte. Este bloque existe para que
 // la IA, al elegir qué graficar por defecto para un tema, tenga el mapa
 // REAL de lo que existe en visual.js y pueda distinguir dos casos bien
 // distintos antes de recurrir a "necesitaHerramienta" (ver más abajo y
@@ -73,6 +74,7 @@ Comandos 2D que visual.js YA soporta (además de fórmulas explícita/implícita
 - taylor(f(x), a, n) -> f y su polinomio de Taylor de grado n en x=a
 - field(P(x,y), Q(x,y)) -> campo vectorial (dx,dy)=(P,Q)
 - matrix(a, b, c, d) -> transformación lineal [[a,b],[c,d]] aplicada a la grilla
+- euler(angulo) -> fórmula de Euler en el plano complejo: círculo unidad y flecha a e^(i*angulo) = cos(angulo) + i*sin(angulo), con sus proyecciones y el paso "+1" (con angulo = pi la flecha termina en 0: e^(i*pi)+1=0). El ángulo va en radianes y puede llevar una letra suelta como parámetro animable (euler(t)). ESTE es el único comando que vos SÍ podés emitir (ver el formato 4 de arriba).
 
 Comandos 3D que visual.js YA soporta:
 - Sphere(radius)
@@ -97,7 +99,39 @@ frontend le arma un slider propio automáticamente. Arranca en valor 1, así que
 bien (no quedar constante, indefinida o sin solución real) también con esa letra en 1. No la uses como la
 única fuente de escala de una implícita (ej. "x^2+y^2=a" da un círculo de radio 1, válido pero chico) sin
 sumarle algo -- preferí algo como "x^2+y^2=(3+a)^2". Usá como máximo una, y solo cuando de verdad aporte
-(una familia de curvas con un parámetro variable), no en cada fórmula.`;
+(una familia de curvas cuyo parámetro tiene un significado que el tema enseña), no en cada fórmula ni
+solo para mostrar "distintas pendientes" o "distintas escalas" de la misma curva.`;
+
+// Criterio de REPRESENTACIÓN para "visual" -- el modelo lo aplica ANTES de elegir fórmulas (ver el campo "analisis"
+// de armarToolVisual y validarAnalisisVisual en validarEstructura.js). Surge de un caso real: para
+// "Hydrostatics" el generador devolvió "a*x", "2*x" y "0.5*x" -- tres rectas genéricas que el alumno no puede
+// asociar a la presión ni a la profundidad (el graficador solo muestra ejes x/y sin rótulos ni unidades). La
+// regla central es la "prueba del alumno": el gráfico tiene que enseñar el tema POR SU FORMA, sin texto.
+const CRITERIO_CUERPO_VISUAL = `Lo que el alumno ve es SOLO un gráfico con ejes x/y (o x/y/z) sin título, sin rótulos, sin unidades y sin
+explicación escrita: no puede saber que "x" quería decir "profundidad" o "tiempo". El gráfico tiene que enseñar el
+tema por su forma.
+PRUEBA DEL ALUMNO: si alguien ve la gráfica sin ningún texto, ¿entiende qué enseña el tema, o ve una función
+cualquiera? Si ve una función cualquiera, el tema NO se grafica bien acá.
+- GRAFICÁ cuando la esencia del tema ES una función o relación matemática cuya forma es la lección:
+  funciones y sus familias, límites, derivadas, integrales, trigonometría, cónicas, curvas y superficies,
+  números complejos, distribuciones de probabilidad (la curva de densidad), series y sucesiones, ecuaciones
+  diferenciales (campos de pendientes).
+- GRAFICÁ un tema de otra ciencia SOLO si tiene una curva canónica, la que todo libro dibuja y que se reconoce
+  sin rótulos (ej. la campana de Gauss, una oscilación senoidal, la trayectoria parabólica y(x) de un tiro
+  oblicuo, un decaimiento exponencial).
+- RESERVÁ cuando la esencia del tema es una ESCENA, un sistema, un proceso, un aparato o una magnitud con unidades
+  (fluidos en reposo, circuitos, reacciones y estequiometría, división celular, diagramas de rayos, fuerzas sobre un
+  cuerpo, oferta y demanda con curvas rotuladas) y lo único que se podría dibujar es una recta o curva genérica a
+  la que solo el autor le da significado. Que una ley sea lineal NO justifica graficar "a*x", "2*x" y "0.5*x": eso
+  es una familia de rectas sin significado para el alumno.
+- Que "se pueda escribir una fórmula" NO es suficiente: tiene que enseñar el tema. Forzar un gráfico genérico es
+  peor que reservar, porque el alumno cree que eso es lo que el tema significa.
+- Si la prueba del alumno se pasa, se grafica sin vacilar; si falla, se reserva.`;
+
+// Versión para el CREADOR del borrador (usa el campo "analisis" de su herramienta).
+const CRITERIO_REPRESENTACION_VISUAL = `PRIMERO DECIDÍ SI ESTE TEMA SE PUEDE MOSTRAR BIEN EN ESTE GRAFICADOR. Antes de elegir ninguna fórmula,
+completá el campo "analisis" de la herramienta. ${CRITERIO_CUERPO_VISUAL}
+En "relacion_candidata" decí qué magnitud es cada eje. Reservar = "veredicto": "reservar" + "necesitaHerramienta".`;
 
 // Cantidad de preguntas por modelo, según tipo. exam.js (frontend) arma
 // 3 modelos free de 12 preguntas cada uno para el examen (antes 10) --
@@ -131,59 +165,7 @@ export function armarToolClaude(tipo) {
     };
   }
 
-  if (tipo === "visual") {
-    return {
-      name: "guardar_formulas_visual",
-      description: "Guarda las fórmulas que se grafican por defecto en el graficador interactivo del tema. Si ninguna fórmula (ni ningún comando que ya tenga visual.js) representa bien el tema, usa \"necesitaHerramienta\" en vez de \"formulas\".",
-      input_schema: {
-        type: "object",
-        properties: {
-          formulas: {
-            type: "array",
-            minItems: 1,
-            maxItems: MAX_FORMULAS_VISUAL,
-            description: `Entre 1 y ${MAX_FORMULAS_VISUAL} fórmulas distintas que se grafican juntas, cada una con su color. La primera es la principal.`,
-            items: {
-              type: "object",
-              properties: {
-                formula: {
-                  type: "string",
-                  description: `Expresión evaluable, NO LaTeX -- ver el system prompt para el detalle completo. Tres formatos posibles: (1) explícita en x/y, ej. "sin(x)*cos(y)"; (2) implícita "izquierda=derecha" en x/y o x/y/z, ej. "x^2+y^2=25"; (3) paramétrica, tres líneas "x=...\\ny=...\\nz=..." en u/v. Solo puede usar números, esas variables, pi/e, los operadores + - * / ^ ( ), y estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.`,
-                },
-              },
-              required: ["formula"],
-            },
-          },
-          necesitaHerramienta: {
-            type: "object",
-            description: "Alternativa a \"formulas\" -- usar SOLO cuando ni los 3 formatos de fórmula ni ninguno de los comandos que ya tiene visual.js (ver el catálogo completo en el system prompt) alcanzan para mostrar bien este tema. No mandar junto con \"formulas\": es uno u otro.",
-            properties: {
-              tema: {
-                type: "string",
-                description: "Qué se quería graficar/mostrar para este tema (1-2 frases concretas, no genéricas).",
-              },
-              motivo: {
-                type: "string",
-                description: "Por qué ni los 3 formatos de fórmula ni ninguno de los comandos que ya tiene visual.js (ver catálogo en el system prompt) alcanzan para esto.",
-              },
-              herramienta_sugerida: {
-                type: "string",
-                description: "Qué haría falta para cubrirlo: un comando/función nueva en visual.js, o una herramienta externa aparte (y para qué, ej. precálculo pesado mejor en Rust/C++).",
-              },
-            },
-            required: ["tema", "motivo", "herramienta_sugerida"],
-          },
-        },
-        // SIN anyOf/oneOf/allOf en la raíz: la API de Anthropic rechaza el
-        // input_schema con 400 ("input_schema does not support oneOf,
-        // allOf, or anyOf at the top level"), lo que hacía fallar TODOS los
-        // intentos de "visual". La regla "formulas O necesitaHerramienta"
-        // (uno u otro, al menos uno) ya la hace cumplir validarVisual en
-        // lib/validarEstructura.js del lado del servidor, y el description
-        // de cada campo se lo dice al modelo.
-      },
-    };
-  }
+  if (tipo === "visual") return armarToolVisual(true);
 
   const cantidad = PREGUNTAS_POR_MODELO[tipo] ?? 10;
   const pregunta = {
@@ -233,6 +215,94 @@ export function armarToolClaude(tipo) {
 }
 
 /**
+ * Tool de "visual". `conAnalisis` = true para la CREACIÓN del borrador: suma el campo "analisis" (razonamiento
+ * previo que el modelo tiene que completar ANTES de elegir fórmulas -- con tool_choice forzado no hay "thinking"
+ * extendido, así que el razonamiento se obliga por esquema; el servidor lo valida en validarAnalisisVisual).
+ * La tool de CORRECCIÓN (armarToolCorreccion) usa conAnalisis = false: ahí ya se decidió y solo se revisan fórmulas.
+ */
+function armarToolVisual(conAnalisis) {
+  const analisis = conAnalisis ? {
+    analisis: {
+      type: "object",
+      description: "Razonamiento previo: completalo PRIMERO, antes de \"formulas\" o \"necesitaHerramienta\". No se muestra al alumno; el servidor lo valida.",
+      properties: {
+        concepto_central: {
+          type: "string",
+          description: "Qué enseña este tema, en 1 frase concreta (no el nombre del tema repetido).",
+        },
+        relacion_candidata: {
+          type: "string",
+          description: "La relación matemática concreta que sería el corazón del tema y qué significa cada variable o eje (x, y, z, u, v). Si ninguna enseña el tema, escribí \"ninguna\" y explicá por qué.",
+        },
+        prueba_del_alumno: {
+          type: "string",
+          description: "Qué entendería un alumno que ve SOLO la gráfica, con ejes x/y sin etiquetas, sin unidades y sin tu explicación: ¿ve el concepto del tema o una función cualquiera?",
+        },
+        veredicto: {
+          type: "string",
+          enum: ["grafica_bien", "reservar"],
+          description: "\"grafica_bien\" SOLO si la prueba del alumno se pasa; \"reservar\" si no. Con \"reservar\" hay que completar \"necesitaHerramienta\" y NO mandar \"formulas\"; con \"grafica_bien\" hay que mandar \"formulas\" y NO \"necesitaHerramienta\".",
+        },
+      },
+      required: ["concepto_central", "relacion_candidata", "prueba_del_alumno", "veredicto"],
+    },
+  } : {};
+  return {
+    name: "guardar_formulas_visual",
+    description: "Guarda las fórmulas que se grafican por defecto en el graficador interactivo del tema. Completá primero \"analisis\". Si el tema no se enseña bien con ninguna fórmula (ni con ningún comando que ya tenga visual.js), usá \"necesitaHerramienta\" en vez de \"formulas\".",
+    input_schema: {
+      type: "object",
+      ...(conAnalisis ? { required: ["analisis"] } : {}),
+      properties: {
+        ...analisis,
+        formulas: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_FORMULAS_VISUAL,
+          description: `Entre 1 y ${MAX_FORMULAS_VISUAL} fórmulas distintas que se grafican juntas, cada una con su color. La primera es la principal.`,
+          items: {
+            type: "object",
+            properties: {
+              formula: {
+                type: "string",
+                description: `Expresión evaluable, NO LaTeX -- ver el system prompt para el detalle completo. Cuatro formatos posibles: (1) explícita en x/y, ej. "sin(x)*cos(y)"; (2) implícita "izquierda=derecha" en x/y o x/y/z, ej. "x^2+y^2=25"; (3) paramétrica, tres líneas "x=...\\ny=...\\nz=..." en u/v; (4) el comando euler(ángulo), ej. "euler(t)" o "euler(pi)": fórmula de Euler en el plano complejo (solo 2D, va solo o con curvas 2D). Salvo en euler(...), solo puede usar números, esas variables, pi/e, los operadores + - * / ^ ( ), y estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.`,
+              },
+            },
+            required: ["formula"],
+          },
+        },
+        necesitaHerramienta: {
+          type: "object",
+          description: "Alternativa a \"formulas\" -- usar SOLO cuando ni los 4 formatos de fórmula ni ninguno de los comandos que ya tiene visual.js (ver el catálogo completo en el system prompt) alcanzan para mostrar bien este tema. No mandar junto con \"formulas\": es uno u otro.",
+          properties: {
+            tema: {
+              type: "string",
+              description: "Qué se quería graficar/mostrar para este tema (1-2 frases concretas, no genéricas).",
+            },
+            motivo: {
+              type: "string",
+              description: "Por qué ni los 4 formatos de fórmula ni ninguno de los comandos que ya tiene visual.js (ver catálogo en el system prompt) alcanzan para esto.",
+            },
+            herramienta_sugerida: {
+              type: "string",
+              description: "Qué haría falta para cubrirlo: un comando/función nueva en visual.js, o una herramienta externa aparte (y para qué, ej. precálculo pesado mejor en Rust/C++).",
+            },
+          },
+          required: ["tema", "motivo", "herramienta_sugerida"],
+        },
+      },
+      // SIN anyOf/oneOf/allOf en la raíz: la API de Anthropic rechaza el
+      // input_schema con 400 ("input_schema does not support oneOf,
+      // allOf, or anyOf at the top level"), lo que hacía fallar TODOS los
+      // intentos de "visual". La regla "formulas O necesitaHerramienta"
+      // (uno u otro, al menos uno) ya la hace cumplir validarVisual en
+      // lib/validarEstructura.js del lado del servidor, y el description
+      // de cada campo se lo dice al modelo.
+    },
+  };
+}
+
+/**
  * Tool schema para la CORRECCIÓN con Fable (misma forma que
  * armarToolClaude, pero con nombre/descripción propios de un paso de
  * revisión en vez de creación). Se reusa la construcción del schema en
@@ -244,14 +314,136 @@ export function armarToolClaude(tipo) {
  * generar.js.
  */
 export function armarToolCorreccion(tipo) {
+  if (tipo === "visual") {
+    // Sin "analisis": la decisión de graficar/reservar ya se tomó (borrador + juez); acá solo se revisan las
+    // fórmulas. Lleva "revision_matematica" (PRIMERA propiedad, obligatoria): el revisor matemático tiene que
+    // re-derivar cada fórmula antes de devolverla -- ver validarRevisionMatematicaVisual.
+    const base = armarToolVisual(false);
+    return {
+      ...base,
+      name: "guardar_formulas_visual_corregidas",
+      description: "Guarda las fórmulas visuales revisadas del tema. Completá primero \"revision_matematica\" (una fila por fórmula).",
+      input_schema: {
+        ...base.input_schema,
+        required: ["revision_matematica"],
+        properties: {
+          revision_matematica: {
+            type: "array",
+            minItems: 1,
+            maxItems: MAX_FORMULAS_VISUAL,
+            description: "Una fila por fórmula de \"formulas\" (misma cantidad y mismo orden), completada ANTES de devolver las fórmulas.",
+            items: {
+              type: "object",
+              properties: {
+                relacion_prevista: {
+                  type: "string",
+                  description: "Qué relación matemática del tema debería representar esta fórmula, en palabras o en notación (ej. \"densidad normal estándar: exp(-x^2/2)/sqrt(2*pi)\").",
+                },
+                comprobacion: {
+                  type: "string",
+                  description: "Cómo la re-derivaste y comprobaste: constantes, signos, dominio y 2-3 valores concretos calculados a mano (ej. \"en x=0 da 0.399; en x=±1 da 0.242\") y si se ve en el rango x,y∈[-10,10].",
+                },
+                resultado: { type: "string", enum: ["correcta", "corregida"], description: "\"correcta\" si la dejás IGUAL; \"corregida\" si la cambiaste." },
+              },
+              required: ["relacion_prevista", "comprobacion", "resultado"],
+            },
+          },
+          ...base.input_schema.properties,
+        },
+      },
+    };
+  }
   const toolBase = armarToolClaude(tipo);
   if (tipo === "formula") {
     return { ...toolBase, name: "guardar_formula_corregida", description: "Guarda la fórmula corregida del tema." };
   }
-  if (tipo === "visual") {
-    return { ...toolBase, name: "guardar_formulas_visual_corregidas", description: "Guarda las fórmulas visuales corregidas del tema." };
-  }
   return { ...toolBase, name: "guardar_banco_preguntas_corregido", description: `Guarda el banco de preguntas de ${tipo} corregido para el tema.` };
+}
+
+/**
+ * Tool del JUEZ de "visual". El juez es una CONSULTA CIEGA: no ve nada de lo que propuso el creador (ni fórmulas ni
+ * razonamiento ni criterio) -- recibe solo materia + tema y responde "¿se puede crear una herramienta mejor que un
+ * graficador de funciones para enseñar esto?". Así no se ancla a la propuesta del creador (los modelos que evalúan
+ * tienden a coincidir con lo que leen) y la pregunta cambia el sesgo: en vez de pedirle que "se rinda", se le pide
+ * que PROPONGA la mejor herramienta, que es lo que un modelo hace con ganas. El veredicto lo deriva el servidor
+ * del nivel de "mejora" (ver veredictoDelJuezVisual): el modelo no elige "aprobar" a la ligera. Los campos van en
+ * el orden en que tiene que razonar.
+ */
+export function armarToolJuezVisual() {
+  return {
+    name: "dictaminar_visual",
+    description: "Dictamina cuánto mejor podría enseñar este tema una herramienta ideal frente a un graficador de funciones. Completá los campos EN ORDEN.",
+    input_schema: {
+      type: "object",
+      required: ["leccion_esencial", "mejor_herramienta_posible", "que_alcanza_a_mostrar_un_graficador", "lo_que_se_pierde", "mejora", "razon"],
+      properties: {
+        leccion_esencial: {
+          type: "string",
+          description: "Lo esencial que un alumno debería entender de este tema (1-2 frases concretas).",
+        },
+        mejor_herramienta_posible: {
+          type: "string",
+          description: "La mejor herramienta imaginable para enseñar esa lección, sin limitarte a lo que existe hoy: qué mostraría y cómo se usaría, en concreto.",
+        },
+        que_alcanza_a_mostrar_un_graficador: {
+          type: "string",
+          description: "Qué parte de la lección llegaría a mostrar un graficador de funciones (curvas y superficies sobre ejes x/y sin rótulos ni unidades).",
+        },
+        lo_que_se_pierde: {
+          type: "string",
+          description: "Qué parte ESENCIAL de la lección el graficador NO muestra o muestra de forma confusa. Si ninguna, decilo y explicá por qué.",
+        },
+        mejora: {
+          type: "string",
+          enum: ["ninguna", "marginal", "sustancial", "enorme"],
+          description: "Cuánto más enseñaría la herramienta ideal que el graficador, en lo ESENCIAL (no cuenta el pulido visual ni lo que el graficador ya hace): ninguna | marginal | sustancial | enorme.",
+        },
+        razon: { type: "string", description: "Justificación de la mejora en 1-3 frases, para el registro (no la ve el alumno)." },
+      },
+    },
+  };
+}
+
+/**
+ * Prompt del JUEZ de "visual" (consulta ciega, ver armarToolJuezVisual). Recibe SOLO materia y tema; describe
+ * qué es y qué hace hoy el graficador para que pueda comparar, pero no incluye la propuesta del creador, su
+ * razonamiento ni el criterio de graficar/reservar. Los dos ejemplos de calibración son de signo contrario y
+ * ninguno es el caso que originó este flujo (Hidrostática).
+ */
+export function armarPromptJuezVisual(materia, tema, idioma = "es") {
+  return {
+    system: `Sos un diseñador de herramientas educativas con mucha experiencia. Te consultan por un tema (materia:
+"${materia}", tema: "${tema}").
+
+Hoy esta biblioteca enseña los temas con un GRAFICADOR DE FUNCIONES. Esto es TODO lo que hace: dibuja curvas y
+superficies a partir de fórmulas, sobre ejes x/y (o x/y/z) sin título, sin rótulos y sin unidades; el alumno ve solo
+las gráficas y la lista de fórmulas, nada más. No dibuja escenas, aparatos, objetos físicos, diagramas ni procesos.
+Lo que ya sabe hacer, además de graficar fórmulas:
+${CAPACIDADES_VISUAL_JS_COMPLETAS}
+
+Tu pregunta: ¿se puede crear una herramienta MEJOR que ese graficador para enseñar ESTE tema?
+1. Pensá primero qué es lo esencial que un alumno debería entender ("leccion_esencial").
+2. Imaginá la mejor herramienta posible para enseñarlo, sin limitarte a lo que existe hoy
+   ("mejor_herramienta_posible"): qué mostraría y cómo se usaría, en concreto.
+3. Pensá qué parte de esa lección llegaría a mostrar el graficador de funciones
+   ("que_alcanza_a_mostrar_un_graficador") y qué parte NO ("lo_que_se_pierde").
+4. Dá la "mejora": cuánto más enseñaría la herramienta ideal que el graficador, en lo ESENCIAL del tema.
+   - "ninguna": el graficador ya muestra lo esencial; una herramienta nueva no enseñaría más.
+   - "marginal": enseñaría un poco más (más prolijo, más cómodo, algún extra), pero la lección se entiende igual con
+     el graficador.
+   - "sustancial": hay una parte esencial de la lección que el graficador no puede mostrar, o solo muestra de forma
+     confusa.
+   - "enorme": el graficador casi no sirve para este tema; la lección está en otra cosa (una escena, un proceso, un
+     aparato, objetos reales) y solo podría dibujar curvas genéricas.
+   No cuenta como mejora: mejor diseño, colores, más animación decorativa, ni nada que el graficador ya hace
+   (parámetros animables con deslizador, los comandos de arriba).
+Sé honesto en los dos sentidos: no inventes mejoras para temas que el graficador ya enseña bien (por ejemplo, una
+derivada y su recta tangente), ni te conformes con el graficador en temas cuya esencia no es una función (por
+ejemplo, las fases de la mitosis).
+${bloqueIdioma(idioma)}
+Respondé llamando a la herramienta, completando los campos en orden.`,
+    prompt: `Materia: ${materia}\nTema: ${tema}`,
+  };
 }
 
 /**
@@ -320,14 +512,19 @@ No agregues texto fuera del JSON.`,
 graficador interactivo (materia: "${materia}", tema: "${tema}"). Son solo los valores DEFAULT: el usuario
 después las puede editar, sumar o quitar, y elige si las ve como gráfico 2D o como superficie 3D con los
 mismos botones, así que no hace falta que decidas eso.
-Devolvé SOLO un JSON válido con esta forma: {"formulas": [{"formula": "string"}, ...]}.
+Respondé llamando a la herramienta: PRIMERO el campo "analisis" y DESPUÉS {"formulas": [{"formula": "string"}, ...]}
+(o "necesitaHerramienta" en lugar de "formulas" si el tema no se enseña bien con este graficador).
+
+${CRITERIO_REPRESENTACION_VISUAL}
 
 CUÁNTAS: elegí entre 1 y ${MAX_FORMULAS_VISUAL} fórmulas, según lo que el tema realmente necesite.
 - Si el tema se entiende con una sola curva o superficie, devolvé UNA. No agregues fórmulas de relleno.
-- Si el tema se entiende mejor comparando (ej: una función y su derivada, distintos casos de un parámetro,
-  una familia de curvas, función e inversa), devolvé las que hagan falta para esa comparación.
-- La primera es la principal. Las demás tienen que aportar algo distinto: nunca repitas una fórmula ni
-  devuelvas variantes triviales de la misma (ej: "sin(x)" y "1*sin(x)").
+- Si el tema se entiende mejor comparando (ej: una función y su derivada, distintos casos de un parámetro
+  con significado, función e inversa), devolvé las que hagan falta para esa comparación.
+- La primera es la principal. Las demás tienen que aportar algo distinto Y con un papel que puedas nombrar en
+  el tema (la función y su derivada; el caso con a>0 y el caso con a<0): nunca repitas una fórmula, ni
+  devuelvas variantes triviales de la misma (ej: "sin(x)" y "1*sin(x)"), ni múltiplos arbitrarios de la misma
+  curva que solo cambian la escala (ej: "x", "2*x" y "0.5*x").
 - No mezcles fórmulas de 2D (solo x) con superficies 3D (x e y) en la misma lista salvo que el tema lo pida:
   se grafican todas en el mismo modo, y una función solo de x se ve como una pared en 3D.
 
@@ -343,9 +540,19 @@ FORMATOS que podés usar para cada "formula" (elegí el que mejor se ajuste al t
    (o ninguna depende de ninguna), da una superficie degenerada. El rango por defecto es u∈[0,2π],
    v∈[-1,1]: elegí algo que se vea bien EN ESE rango, no asumas que podés pedir otro. Ej. de un plano:
    {"formula": "x=u\ny=v\nz=u+v"}
+4) EULER (comando "euler(ángulo)", solo 2D): dibuja la fórmula de Euler en el plano complejo -- el círculo
+   unidad y una flecha desde el origen hasta e^(i*ángulo) = cos(ángulo) + i*sin(ángulo), con sus
+   proyecciones sobre los ejes y el paso "+1". Usalo SOLO cuando el tema trate de la fórmula/identidad de
+   Euler, la forma polar o exponencial de un número complejo, o las raíces de la unidad (el círculo unidad
+   en el plano complejo) -- no para cualquier tema de trigonometría. El ángulo va en radianes: usá una
+   constante (ej. "euler(pi)" muestra la identidad e^(i*pi)+1=0) o UNA letra suelta como parámetro animable
+   para que el alumno lo mueva (ej. "euler(t)", arranca en 1 rad). Adentro de euler() NO se puede usar x, y,
+   z, u ni v. Va una sola vez por lista, y se puede sumar a curvas 2D (ej. {"formulas": [{"formula":
+   "euler(t)"}]}) pero nunca a paramétricas ni superficies 3D.
 
 REGLA DURA sobre el contenido de cada "formula" (no es LaTeX, es una expresión que un parser simple tiene
-que poder evaluar tal cual), aplica a las tres partes de cualquiera de los formatos de arriba:
+que poder evaluar tal cual), aplica a las tres partes de cualquiera de los tres primeros formatos de arriba
+(en euler(...) el ángulo sigue las mismas reglas de expresión: números, pi, e, operadores y funciones):
 - Solo podés usar: números, las variables que correspondan al formato (x/y en explícita; x/y/z en
   implícita; u/v en paramétrica), las constantes pi y e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE
   estas funciones: ${FUNCIONES_PERMITIDAS_VISUAL}.
@@ -365,20 +572,22 @@ que poder evaluar tal cual), aplica a las tres partes de cualquiera de los forma
 - ${BLOQUE_PARAMETRO_ANIMABLE}
 ${bloqueIdioma(idioma)}
 Ejemplos válidos: "sin(x)*cos(y)", "x^2-y^2", "exp(-x^2-y^2)", "x^2+y^2=25".
-Ejemplo de tema comparativo: {"formulas": [{"formula": "x^2"}, {"formula": "2*x"}]}.
+Ejemplo de tema comparativo (una función y su derivada): {"formulas": [{"formula": "x^2"}, {"formula": "2*x"}]}.
 
 SI NINGUNA FÓRMULA REPRESENTA BIEN EL TEMA: antes de forzar algo que no queda bien, tené en cuenta que
-visual.js (el frontend) ya soporta bastante más que estas 3 fórmulas -- este catálogo completo:
+visual.js (el frontend) ya soporta bastante más que estas fórmulas -- este catálogo completo:
 ${CAPACIDADES_VISUAL_JS_COMPLETAS}
-Importante: VOS solo podés emitir "formulas" en los 3 formatos de arriba -- no podés emitir ninguno de estos
-otros comandos (Circle, tangent, area, riemann, taylor, field, matrix, Surface, etc.), aunque el frontend ya
-los tenga. Si el tema se resolvería con uno de ESOS comandos, o si ni con todo este catálogo alcanza (haría
+Importante: VOS solo podés emitir "formulas" en los 4 formatos de arriba (explícita, implícita, paramétrica y
+euler(...)) -- no podés emitir ninguno de estos otros comandos (Circle, tangent, area, riemann, taylor, field,
+matrix, Surface, etc.), aunque el frontend ya los tenga. Si el tema se resolvería con uno de ESOS comandos, o si ni con todo este catálogo alcanza (haría
 falta una función nueva en visual.js o una herramienta externa aparte), NO inventes una fórmula forzada que
 no muestre bien el tema: llamá a la herramienta con "necesitaHerramienta" en vez de "formulas", explicando
-qué se quería graficar, por qué no alcanza lo disponible, y qué haría falta. Usalo solo cuando de verdad
-haga falta -- la gran mayoría de los temas SÍ se resuelven bien con una fórmula explícita/implícita/
-paramétrica normal, esto no es un atajo para evitar pensar la fórmula.
-No agregues texto fuera del JSON.`,
+qué se quería graficar, por qué no alcanza lo disponible, y qué haría falta. Usalo cuando la PRUEBA DEL
+ALUMNO falle (ver arriba): un gráfico genérico que solo vos sabés interpretar es peor que reservar el tema.
+No lo uses para evitar pensar la fórmula cuando el tema SÍ se grafica bien: los temas donde la función o la
+relación matemática ES la lección (funciones, cálculo, trigonometría, cónicas, números complejos,
+distribuciones) se resuelven con una fórmula normal.
+No agregues texto fuera de la llamada a la herramienta.`,
       prompt: `Materia: ${materia}\nTema: ${tema}`,
     };
   }
@@ -446,7 +655,11 @@ formatos -- NO LaTeX:
 - Implícita: "izquierda = derecha" en x/y (o x/y/z para una superficie 3D) -- para círculos, elipses o
   superficies que no se pueden despejar sin perder la mitad de la curva.
 - Paramétrica: tres líneas "x=...", "y=...", "z=..." dentro del mismo string, cada una en función de u y/o v.
-En cualquiera de los tres, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
+- Comando euler(ángulo), solo 2D: fórmula de Euler en el plano complejo (círculo unidad y flecha a
+  e^(i*ángulo)), ej. "euler(t)" o "euler(pi)". Es válido tal cual: NO lo reescribas como otra cosa ni lo
+  conviertas a una explícita. El ángulo va en radianes (una constante o UNA letra suelta como parámetro
+  animable) y no puede usar x, y, z, u ni v. Va una sola vez y nunca junto a paramétricas o superficies 3D.
+En cualquiera de los tres primeros, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
 en implícita; u/v en paramétrica), pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
 ${FUNCIONES_PERMITIDAS_VISUAL}. Excepción: UNA sola letra suelta (que no sea de esa lista) es válida como
 parámetro animable -- ver el párrafo de abajo -- no la reescribas como si fuera "otra variable" inválida.
@@ -525,7 +738,11 @@ formatos -- NO LaTeX:
 - Implícita: "izquierda = derecha" en x/y (o x/y/z para una superficie 3D) -- para círculos, elipses o
   superficies que no se pueden despejar sin perder la mitad de la curva.
 - Paramétrica: tres líneas "x=...", "y=...", "z=..." dentro del mismo string, cada una en función de u y/o v.
-En cualquiera de los tres, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
+- Comando euler(ángulo), solo 2D: fórmula de Euler en el plano complejo (círculo unidad y flecha a
+  e^(i*ángulo)), ej. "euler(t)" o "euler(pi)". Es válido tal cual: NO lo reescribas como otra cosa ni lo
+  conviertas a una explícita. El ángulo va en radianes (una constante o UNA letra suelta como parámetro
+  animable) y no puede usar x, y, z, u ni v. Va una sola vez y nunca junto a paramétricas o superficies 3D.
+En cualquiera de los tres primeros, solo puede usar: números, las variables de ese formato (x/y en explícita; x/y/z
 en implícita; u/v en paramétrica), pi, e, los operadores + - * / ^ ( ), y EXCLUSIVAMENTE estas funciones:
 ${FUNCIONES_PERMITIDAS_VISUAL}. Excepción: UNA sola letra suelta (que no sea de esa lista) es válida como
 parámetro animable -- ver el párrafo de abajo -- no la reescribas como si fuera "otra variable" inválida.
@@ -540,8 +757,23 @@ valores absurdos ahí, o que -siendo implícita- no tiene solución real en ese 
 Reglas de la lista: conservá la MISMA cantidad de fórmulas y el MISMO orden (la primera es la principal);
 no agregues ni quites fórmulas salvo que haya dos repetidas o equivalentes triviales, en cuyo caso quitá la
 repetida; máximo ${MAX_FORMULAS_VISUAL}. Si algún item trae "color", dejalo tal cual.
+
+REVISIÓN MATEMÁTICA (es tu tarea principal; la gramática de arriba es secundaria). Sos el revisor de la LÓGICA
+MATEMÁTICA: otro asistente eligió qué mostrar y un juez ya aprobó que esa idea enseña el tema, así que NO cambies
+la intención pedagógica ni quites ni reemplaces fórmulas por otras ideas. Verificás que cada fórmula sea
+matemáticamente correcta. Antes de devolver las fórmulas, completá "revision_matematica" con UNA fila por fórmula
+(mismo orden). Para cada una:
+1. "relacion_prevista": decí qué relación del tema debería representar (ej. densidad normal estándar,
+   exp(-x^2/2)/sqrt(2*pi)).
+2. Re-derivala DESDE CERO con tu propio cálculo, sin asumir que está bien: constantes de normalización, signos,
+   exponentes, el dominio (que no quede indefinida justo donde importa), y que sea la función o la curva COMPLETA que
+   corresponde (ej. una circunferencia implícita en vez de una raíz que muestra media circunferencia).
+3. "comprobacion": calculá a mano 2 o 3 valores concretos y anotalos (ej. "en x=0 da 0.399; en x=±1 da 0.242").
+   Verificá además que la parte importante se vea en x,y∈[-10,10]: no aplastada contra un eje ni fuera de pantalla.
+4. "resultado": "correcta" si la dejás IGUAL; "corregida" si encontraste un error y la cambiaste. No retoques por
+   gusto una fórmula que ya está bien.
 ${bloqueIdioma(idioma)}
-Guardá las fórmulas visuales corregidas con la herramienta.`,
+Guardá la revisión y las fórmulas visuales revisadas con la herramienta.`,
       prompt: JSON.stringify(borrador),
     };
   }
