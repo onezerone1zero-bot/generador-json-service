@@ -1,4 +1,5 @@
 import express from "express";
+import { createHash, timingSafeEqual } from "crypto";
 import { generarYGuardarJSON } from "./lib/generar.js";
 import { validarEnv } from "./lib/validarEnv.js";
 
@@ -8,6 +9,14 @@ validarEnv();
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 
+// Comparación en tiempo constante (se compara el hash para que el largo de la clave tampoco se filtre).
+function clavesIguales(recibida, esperada) {
+  if (typeof esperada !== "string" || esperada === "") return false;
+  const a = createHash("sha256").update(String(recibida)).digest();
+  const b = createHash("sha256").update(esperada).digest();
+  return timingSafeEqual(a, b);
+}
+
 // Auth simple entre generador-service-main (quien dispara esto) y este
 // servicio -- mismo esquema que generador-service-main/src/server.js.
 // SERVICE_KEY acá es una clave DISTINTA a la del otro service (ver
@@ -15,7 +24,7 @@ app.use(express.json({ limit: "2mb" }));
 function chequearAuth(req, res) {
   const auth = req.headers.authorization || "";
   const token = auth.replace("Bearer ", "");
-  if (token !== process.env.SERVICE_KEY) {
+  if (!clavesIguales(token, process.env.SERVICE_KEY)) {
     res.status(401).json({ error: "No autorizado" });
     return false;
   }
